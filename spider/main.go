@@ -23,7 +23,7 @@ func main() {
 		VisitedUrls: map[string]struct{}{},
 		QueuedUrls:  map[string]bool{},
 	}
-
 	crawler.Start("https://en.wikipedia.org/wiki/Atlas")
+	// crawler.Start("https://dev.to/")
 
 }
