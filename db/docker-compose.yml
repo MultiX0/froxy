@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: froxy_pgsql
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+      - ./db_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./db_indexes.sql:/docker-entrypoint-initdb.d/02_indexes.sql
