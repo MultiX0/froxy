@@ -1,7 +1,7 @@
 spider/.env
-indexer/node_modules
+indexer-search/node_modules
 front-end/node_modules
-indexer/.env
+indexer-search/.env
 spider/crawler.log
 
 
@@ -30,3 +30,10 @@ front-end/.vercel
 # typescript
 front-end/*.tsbuildinfo
 front-end/next-env.d.ts
+
+
+# Database data directory (PostgreSQL files)
+db/postgres_data/
+
+# Environment file with database credentials
+db/.env
