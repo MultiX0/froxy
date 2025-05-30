@@ -1,3 +1,32 @@
 spider/.env
 indexer/node_modules
+front-end/node_modules
 indexer/.env
+spider/crawler.log
+
+
+# frontend
+front-end/node_modules
+
+# next.js
+front-end/.next/
+front-end/out/
+
+# production
+front-end/build
+
+# debug
+front-end/npm-debug.log*
+front-end/yarn-debug.log*
+front-end/yarn-error.log*
+front-end/.pnpm-debug.log*
+
+# env files
+front-end/.env*
+
+# vercel
+front-end/.vercel
+
+# typescript
+front-end/*.tsbuildinfo
+front-end/next-env.d.ts
