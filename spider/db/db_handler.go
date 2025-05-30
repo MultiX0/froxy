@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/froxy/models"
 )
@@ -27,7 +28,6 @@ func (h *SupabaseHandler) InsertLinksSimple(links []models.Link) error {
 		return nil
 	}
 
-	// Semaphore to limit concurrent goroutines
 	sem := make(chan struct{}, h.maxWorkers)
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(links))
@@ -37,7 +37,6 @@ func (h *SupabaseHandler) InsertLinksSimple(links []models.Link) error {
 		go func(link models.Link) {
 			defer wg.Done()
 
-			// Acquire semaphore
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
@@ -50,7 +49,6 @@ func (h *SupabaseHandler) InsertLinksSimple(links []models.Link) error {
 	wg.Wait()
 	close(errChan)
 
-	// Collect errors
 	var errors []error
 	for err := range errChan {
 		errors = append(errors, err)
@@ -64,58 +62,51 @@ func (h *SupabaseHandler) InsertLinksSimple(links []models.Link) error {
 }
 
 func (h *SupabaseHandler) InsertSingleLink(link models.Link) error {
+
 	supabaseClient.From("links").Insert(link, true, "", "", "exact").Execute()
 
 	fmt.Printf("Link: %s inserted.\n", link.URL)
 	return nil
 }
 
-func (h *SupabaseHandler) InsertPageLinks(fromPageID int, fromURL string, outboundLinks []models.Link) error {
-	if len(outboundLinks) == 0 {
+func (h *SupabaseHandler) InsertPageLinks(pageID int, fromURL string, links []models.Link) error {
+	if len(links) == 0 {
 		return nil
 	}
 
-	// Parse the source domain for link type classification
+	var linksData []map[string]interface{}
+
 	fromParsedURL, err := url.Parse(fromURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse source URL: %v", err)
 	}
 	fromDomain := fromParsedURL.Host
 
-	// Prepare batch insert data
-	linksData := make([]map[string]any, 0, len(outboundLinks))
-
-	for _, link := range outboundLinks {
-		// Skip empty links
-		if link.URL == "" {
-			continue
-		}
-
-		// Determine link type (internal vs external)
+	for _, link := range links {
 		linkType := "external"
 		if toParsedURL, err := url.Parse(link.URL); err == nil {
 			if toParsedURL.Host == fromDomain {
 				linkType = "internal"
 			}
 		}
-
-		linksData = append(linksData, map[string]any{
-			"from_page_id": fromPageID,
+		linkData := map[string]interface{}{
+			"from_page_id": pageID,
 			"to_url":       link.URL,
 			"anchor_text":  link.Text,
 			"link_type":    linkType,
-		})
-	}
-
-	// Batch insert links
-	if len(linksData) > 0 {
-		result := supabaseClient.From("links").Insert(linksData, false, "", "", "exact")
-		_, _, err := result.Execute()
-		if err != nil {
-			return fmt.Errorf("failed to insert links: %v", err)
+			"created_at":   time.Now().UTC(),
 		}
+		linksData = append(linksData, linkData)
 	}
 
+	result := supabaseClient.From("links").Insert(linksData, false, "", "", "")
+	_, _, err = result.Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to insert links batch: %v", err)
+	}
+
+	fmt.Printf("Successfully inserted %d links for page ID %d\n", len(links), pageID)
 	return nil
 }
 
@@ -124,7 +115,6 @@ func (h *SupabaseHandler) InsertPageHeadings(pageID int, headings map[string][]s
 		return nil
 	}
 
-	// Prepare headings data
 	headingsData := make([]map[string]any, 0)
 
 	for headingType, texts := range headings {
@@ -132,15 +122,14 @@ func (h *SupabaseHandler) InsertPageHeadings(pageID int, headings map[string][]s
 			if strings.TrimSpace(text) != "" {
 				headingsData = append(headingsData, map[string]any{
 					"page_id":      pageID,
-					"heading_type": headingType, // h1, h2, h3, etc.
+					"heading_type": headingType,
 					"text":         text,
-					"position":     i + 1, // Order of appearance
+					"position":     i + 1,
 				})
 			}
 		}
 	}
 
-	// Insert headings
 	if len(headingsData) > 0 {
 		result := supabaseClient.From("page_headings").Insert(headingsData, false, "", "", "exact")
 		_, _, err := result.Execute()
@@ -152,9 +141,65 @@ func (h *SupabaseHandler) InsertPageHeadings(pageID int, headings map[string][]s
 	return nil
 }
 
-// // Alternative method: Insert page and get ID in one go using upsert
+func (h *SupabaseHandler) InsertPageData(page models.PageData) error {
+
+	result := supabaseClient.From("pages").Insert(map[string]any{
+		"url":              page.URL,
+		"title":            page.Title,
+		"meta_description": page.MetaDescription,
+		"meta_keywords":    page.MetaKeywords,
+		"language":         page.Language,
+		"canonical":        page.Canonical,
+		"content":          page.MainContent,
+		"word_count":       page.WordCount,
+		"status_code":      page.StatusCode,
+		"response_time":    page.ResponseTime.Milliseconds(),
+		"content_type":     page.ContentType,
+		"crawl_date":       page.CrawlDate.UTC(),
+		"last_modified":    page.LastModified.UTC(),
+	}, false, "", "", "exact")
+
+	data, _, err := result.Execute()
+
+	if err != nil {
+		return fmt.Errorf("failed to insert page: %v", err)
+	}
+
+	var insertedPage []map[string]interface{}
+	if err := json.Unmarshal(data, &insertedPage); err != nil {
+		return fmt.Errorf("failed to unmarshal page result: %v", err)
+	}
+
+	if len(insertedPage) == 0 {
+		return fmt.Errorf("no page data returned after insert")
+	}
+
+	pageID, ok := insertedPage[0]["id"].(float64)
+	if !ok {
+		return fmt.Errorf("failed to get page ID")
+	}
+
+	if len(page.OutboundLinks) > 0 {
+		err := h.InsertPageLinks(int(pageID), page.URL, page.OutboundLinks)
+		if err != nil {
+			fmt.Printf("Warning: Failed to insert links for page %s: %v\n", page.URL, err)
+
+		}
+	}
+
+	if len(page.Headings) > 0 {
+		err := h.InsertPageHeadings(int(pageID), page.Headings)
+		if err != nil {
+			fmt.Printf("Warning: Failed to insert headings for page %s: %v\n", page.URL, err)
+		}
+	}
+
+	fmt.Printf("PageData: %s inserted with ID %d\n", page.Title, int(pageID))
+	return nil
+}
+
 func (h *SupabaseHandler) UpsertPageData(page models.PageData) error {
-	// Use upsert to handle existing URLs
+
 	result := supabaseClient.From("pages").Upsert(map[string]any{
 		"url":              page.URL,
 		"title":            page.Title,
@@ -169,47 +214,55 @@ func (h *SupabaseHandler) UpsertPageData(page models.PageData) error {
 		"content_type":     page.ContentType,
 		"crawl_date":       page.CrawlDate.UTC(),
 		"last_modified":    page.LastModified.UTC(),
-	}, "url", "", "")
+	}, "url", "", "exact")
 
-	_, _, err := result.Execute()
-
+	data, _, err := result.Execute()
 	if err != nil {
 		return fmt.Errorf("failed to upsert page: %v", err)
 	}
 
-	// Get the page ID by querying with URL
-	pageResult := supabaseClient.From("pages").
-		Select("id", "", false).
-		Eq("url", page.URL)
-
-	pageResultData, _, err := pageResult.Execute()
-
-	if err != nil {
-		return fmt.Errorf("failed to get page ID: %v", err)
+	var upsertedPage []map[string]interface{}
+	if err := json.Unmarshal(data, &upsertedPage); err != nil {
+		return fmt.Errorf("failed to unmarshal page result: %v", err)
 	}
 
-	var pages []map[string]interface{}
-	if err := json.Unmarshal(pageResultData, &pages); err != nil {
-		return fmt.Errorf("failed to unmarshal page query: %v", err)
+	if len(upsertedPage) == 0 {
+		return fmt.Errorf("no page data returned after upsert")
 	}
 
-	if len(pages) == 0 {
-		return fmt.Errorf("page not found after upsert")
-	}
-
-	pageID, ok := pages[0]["id"].(int64)
+	pageID, ok := upsertedPage[0]["id"].(float64)
 	if !ok {
-		return fmt.Errorf("failed to get page ID from query")
+		return fmt.Errorf("failed to get page ID")
 	}
 
-	// Delete existing links for this page (for updates)
-	supabaseClient.From("links").Delete("", "").Eq("from_page_id", string(pageID)).Execute()
+	fmt.Printf("Deleting existing links for page ID: %d\n", int(pageID))
+	deleteLinksResult := supabaseClient.From("links").Delete("", "").Eq("from_page_id", fmt.Sprintf("%.0f", pageID))
+	_, _, err = deleteLinksResult.Execute()
+	if err != nil {
+		fmt.Printf("Warning: Failed to delete existing links for page %d: %v\n", int(pageID), err)
 
-	// Insert new links
+	}
+
+	fmt.Printf("Deleting existing headings for page ID: %d\n", int(pageID))
+	deleteHeadingsResult := supabaseClient.From("headings").Delete("", "").Eq("page_id", fmt.Sprintf("%.0f", pageID))
+	_, _, err = deleteHeadingsResult.Execute()
+	if err != nil {
+		fmt.Printf("Warning: Failed to delete existing headings for page %d: %v\n", int(pageID), err)
+
+	}
+
 	if len(page.OutboundLinks) > 0 {
 		err := h.InsertPageLinks(int(pageID), page.URL, page.OutboundLinks)
 		if err != nil {
-			fmt.Printf("Warning: Failed to insert links: %v\n", err)
+			fmt.Printf("Warning: Failed to insert links for page %s: %v\n", page.URL, err)
+
+		}
+	}
+
+	if len(page.Headings) > 0 {
+		err := h.InsertPageHeadings(int(pageID), page.Headings)
+		if err != nil {
+			fmt.Printf("Warning: Failed to insert headings for page %s: %v\n", page.URL, err)
 		}
 	}
 
@@ -228,7 +281,7 @@ func NewSupabaseHandler(maxWorkers int) *SupabaseHandler {
 
 func GetSupabaseHandler() *SupabaseHandler {
 	handlerOnce.Do(func() {
-		handlerInstance = NewSupabaseHandler(10) // 10 concurrent workers
+		handlerInstance = NewSupabaseHandler(10)
 	})
 	return handlerInstance
 }
