@@ -16,7 +16,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	db.InitPostgres()
+	err = db.InitPostgres()
+	if err != nil {
+		log.Println(err)
+	}
 
 	crawler := functions.Crawler{
 		LinksQueue:  &[]models.Link{},
