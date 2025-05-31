@@ -38,3 +38,7 @@ db/pg_backups/
 
 # Environment file with database credentials
 db/.env
+
+# remove server key and the certification
+db/certs/server.crt
+db/certs/server.key
