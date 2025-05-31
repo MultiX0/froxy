@@ -303,14 +303,14 @@ module.exports = {
 };
 
 // Run if called directly
-if (require.main === module) {
-  calculateTfIdfInBatches()
-    .then(() => {
-      console.log("TF-IDF calculation completed successfully");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("TF-IDF calculation failed:", error);
-      process.exit(1);
-    });
-}
+// if (require.main === module) {
+//   calculateTfIdfInBatches()
+//     .then(() => {
+//       console.log("TF-IDF calculation completed successfully");
+//       process.exit(0);
+//     })
+//     .catch((error) => {
+//       console.error("TF-IDF calculation failed:", error);
+//       process.exit(1);
+//     });
+// }

@@ -1,10 +1,9 @@
-version: "3.8"
-
 services:
   postgres:
     image: postgres:16
     container_name: froxy_pgsql
     restart: unless-stopped
+    user: postgres
     env_file:
       - .env
     environment:
@@ -17,11 +16,12 @@ services:
       - ./postgres_data:/var/lib/postgresql/data
       - ./db_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./db_indexes.sql:/docker-entrypoint-initdb.d/02_indexes.sql
-      - ./certs:/certs:ro
+      - ./certs/server.crt:/var/lib/postgresql/server.crt:ro
+      - ./certs/server.key:/var/lib/postgresql/server.key:ro
     command: >
       postgres -c ssl=on
-               -c ssl_cert_file=/certs/server.crt
-               -c ssl_key_file=/certs/server.key
+               -c ssl_cert_file=/var/lib/postgresql/server.crt
+               -c ssl_key_file=/var/lib/postgresql/server.key
 
   pg_backup:
     image: postgres:16
