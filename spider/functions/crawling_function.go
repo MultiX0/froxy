@@ -249,6 +249,12 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 		return nil
 	}
 
+	// Skip non-HTML content based on URL patterns
+	if c.shouldSkipURL(websiteUrl) {
+		log.Printf("Skipping non-HTML content: %s", websiteUrl)
+		return nil
+	}
+
 	parsedURL, err := url.Parse(websiteUrl)
 	if err != nil {
 		log.Printf("Failed to parse URL %s: %v", websiteUrl, err)
@@ -296,6 +302,13 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Skipped %s, status: %d", websiteUrl, resp.StatusCode)
 		return fmt.Errorf("non-200 status code: %d", resp.StatusCode)
+	}
+
+	// Validate content type
+	contentType := resp.Header.Get("Content-Type")
+	if !c.isHTMLContent(contentType) {
+		log.Printf("Skipping non-HTML content: %s (Content-Type: %s)", websiteUrl, contentType)
+		return nil
 	}
 
 	// Limit body size to prevent memory issues
@@ -564,15 +577,23 @@ func (c *Crawler) extractTextOnly(n *html.Node, builder *strings.Builder) {
 }
 
 func (c *Crawler) cleanContent(content string) string {
+	// Remove invalid UTF-8 sequences
+	content = strings.ToValidUTF8(content, "")
+
+	// Replace multiple whitespace with single space
 	re := regexp.MustCompile(`\s+`)
 	content = re.ReplaceAllString(content, " ")
 
+	// Remove problematic content
 	content = strings.ReplaceAll(content, "JavaScript", "")
 	content = strings.ReplaceAll(content, "document.write", "")
 
+	// Remove null bytes and other control characters
+	content = strings.ReplaceAll(content, "\x00", "")
+	content = regexp.MustCompile(`[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]`).ReplaceAllString(content, "")
+
 	return strings.TrimSpace(content)
 }
-
 func (c *Crawler) CheckingRobotsRules(domain string, targetPath string) error {
 	robotsCacheMu.RLock()
 	robotsData, exists := robotsCache[domain]
@@ -613,6 +634,54 @@ func (c *Crawler) CheckingRobotsRules(domain string, targetPath string) error {
 	robotsCacheMu.Unlock()
 
 	return nil
+}
+
+func (c *Crawler) shouldSkipURL(url string) bool {
+	// Skip common binary file extensions
+	binaryExtensions := []string{
+		".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg",
+		".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+		".zip", ".rar", ".tar", ".gz", ".7z",
+		".mp3", ".mp4", ".wav", ".avi", ".mov", ".wmv",
+		".css", ".js", ".ico", ".xml", ".json",
+	}
+
+	lowerURL := strings.ToLower(url)
+	for _, ext := range binaryExtensions {
+		if strings.HasSuffix(lowerURL, ext) {
+			return true
+		}
+	}
+
+	// Skip URLs with query parameters that suggest binary content
+	if strings.Contains(lowerURL, "download=") ||
+		strings.Contains(lowerURL, "attachment=") ||
+		strings.Contains(lowerURL, "export=") {
+		return true
+	}
+
+	return false
+}
+
+func (c *Crawler) isHTMLContent(contentType string) bool {
+	if contentType == "" {
+		return true // Assume HTML if no content type
+	}
+
+	lowerType := strings.ToLower(contentType)
+	htmlTypes := []string{
+		"text/html",
+		"application/xhtml+xml",
+		"text/plain",
+	}
+
+	for _, htmlType := range htmlTypes {
+		if strings.Contains(lowerType, htmlType) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (c *Crawler) addToSeen(url string) {

@@ -56,10 +56,10 @@ func InitPostgres() error {
 	log.Println("Successfully connected to PostgreSQL database.")
 
 	// Improved connection pool settings
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)                  // Reduced idle connections
-	db.SetConnMaxLifetime(5 * time.Minute) // Connection lifetime
-	db.SetConnMaxIdleTime(2 * time.Minute) // Idle connection timeout
+	db.SetMaxOpenConns(15)
+	db.SetMaxIdleConns(2)                  // Reduced idle connections
+	db.SetConnMaxLifetime(3 * time.Minute) // Connection lifetime
+	db.SetConnMaxIdleTime(time.Minute)     // Idle connection timeout
 
 	pgHandler = &PostgresHandler{db: db}
 
