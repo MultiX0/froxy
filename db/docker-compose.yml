@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   postgres:
     image: postgres:16
@@ -15,6 +17,11 @@ services:
       - ./postgres_data:/var/lib/postgresql/data
       - ./db_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./db_indexes.sql:/docker-entrypoint-initdb.d/02_indexes.sql
+      - ./certs:/certs:ro
+    command: >
+      postgres -c ssl=on
+               -c ssl_cert_file=/certs/server.crt
+               -c ssl_key_file=/certs/server.key
 
   pg_backup:
     image: postgres:16

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/froxy/db"
@@ -11,6 +12,7 @@ import (
 
 func main() {
 
+	fmt.Println("starting spider bot")
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal(err)
