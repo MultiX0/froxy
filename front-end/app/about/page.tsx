@@ -1,46 +1,8 @@
 "use client"
 
-import type React from "react"
 import { useState, useEffect } from "react"
-import { Search, Github, ArrowRight, Zap } from "lucide-react"
-import { useRouter } from "next/navigation"
+import { ArrowLeft, Github, Database, Search, Zap, Globe, Users } from "lucide-react"
 import Link from "next/link"
-
-const searchSuggestions = [
-  "JavaScript frameworks",
-  "React best practices",
-  "Node.js tutorials",
-  "Python machine learning",
-  "CSS animations",
-  "TypeScript guide",
-  "Web development",
-  "API design patterns",
-  "Database optimization",
-  "Cloud computing",
-  "Docker containers",
-  "Git workflows",
-  "Algorithm challenges",
-  "System design",
-  "Frontend performance",
-  "Golang concurrency",
-  "JavaScript promises",
-  "Golang web server",
-  "JavaScript async/await",
-  "Golang microservices",
-]
-
-const placeholderTexts = [
-  "Search anything...",
-  "Find code snippets...",
-  "Discover tutorials...",
-  "Explore frameworks...",
-  "Search documentation...",
-  "Find best practices...",
-  "Discover algorithms...",
-  "Search repositories...",
-  "Find solutions...",
-  "Explore libraries...",
-]
 
 const formatNumber = (num: number): string => {
   if (num >= 1000000000) {
@@ -55,239 +17,209 @@ const formatNumber = (num: number): string => {
   return num.toString()
 }
 
-export default function FroxySearch() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isFocused, setIsFocused] = useState(false)
-  const [suggestions, setSuggestions] = useState<string[]>([])
-  const [selectedSuggestion, setSelectedSuggestion] = useState(-1)
-  const [currentPlaceholder, setCurrentPlaceholder] = useState("")
-  const [placeholderIndex, setPlaceholderIndex] = useState(0)
-  const [isTransitioning, setIsTransitioning] = useState(false)
-  const router = useRouter()
-  const [resultsCount, setResultsCount] = useState(64000)
+export default function AboutPage() {
+  const [resultsCount, setResultsCount] = useState(0)
+  const [isLoadingCount, setIsLoadingCount] = useState(true)
 
-  // Initialize with random placeholder
+  // Fetch results count from our backend API
   useEffect(() => {
-    const randomIndex = Math.floor(Math.random() * placeholderTexts.length)
-    setPlaceholderIndex(randomIndex)
-    setCurrentPlaceholder(placeholderTexts[randomIndex])
+    const fetchResultsCount = async () => {
+      try {
+        setIsLoadingCount(true)
+        const response = await fetch("/api/results-count")
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const data = await response.json()
+        setResultsCount(data.count || 0)
+      } catch (error) {
+        console.error("Failed to fetch results count:", error)
+        setResultsCount(64000) // fallback
+      } finally {
+        setIsLoadingCount(false)
+      }
+    }
+
+    fetchResultsCount()
   }, [])
-
-  // Cycle through placeholders with smooth transition
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsTransitioning(true)
-
-      setTimeout(() => {
-        setPlaceholderIndex((prev) => (prev + 1) % placeholderTexts.length)
-        setIsTransitioning(false)
-      }, 200) // Half of transition duration
-    }, 4000) // Change every 4 seconds
-
-    return () => clearInterval(interval)
-  }, [])
-
-  // Update placeholder with smooth transition
-  useEffect(() => {
-    if (!isTransitioning) {
-      setCurrentPlaceholder(placeholderTexts[placeholderIndex])
-    }
-  }, [placeholderIndex, isTransitioning])
-
-  useEffect(() => {
-    if (searchQuery.length > 0) {
-      const filtered = searchSuggestions
-        .filter((suggestion) => suggestion.toLowerCase().includes(searchQuery.toLowerCase()))
-        .slice(0, 5)
-      setSuggestions(filtered)
-    } else {
-      setSuggestions([])
-    }
-    setSelectedSuggestion(-1)
-  }, [searchQuery])
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    const query = selectedSuggestion >= 0 ? suggestions[selectedSuggestion] : searchQuery
-    if (query.trim()) {
-      router.push(`/search?q=${encodeURIComponent(query.trim())}`)
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault()
-      setSelectedSuggestion((prev) => (prev < suggestions.length - 1 ? prev + 1 : prev))
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault()
-      setSelectedSuggestion((prev) => (prev > 0 ? prev - 1 : -1))
-    } else if (e.key === "Enter" && selectedSuggestion >= 0) {
-      e.preventDefault()
-      setSearchQuery(suggestions[selectedSuggestion])
-      router.push(`/search?q=${encodeURIComponent(suggestions[selectedSuggestion].trim())}`)
-    }
-  }
-
-  const selectSuggestion = (suggestion: string) => {
-    setSearchQuery(suggestion)
-    setSuggestions([])
-    setIsFocused(false)
-    router.push(`/search?q=${encodeURIComponent(suggestion.trim())}`)
-  }
 
   return (
-    <div className="min-h-screen bg-black dark:bg-black relative overflow-hidden flex flex-col items-center justify-center px-4 transition-colors duration-500">
-      {/* Animated Background Spheres */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-64 sm:w-[400px] h-64 sm:h-[400px] bg-blue-500/15 dark:bg-blue-500/15 rounded-full blur-[140px] animate-breathe-dramatic"></div>
-        <div className="absolute bottom-1/3 right-1/4 w-52 sm:w-[350px] h-52 sm:h-[350px] bg-cyan-400/12 dark:bg-cyan-400/12 rounded-full blur-[140px] animate-breathe-intense"></div>
-        <div className="absolute top-1/2 right-1/3 w-48 sm:w-[380px] h-48 sm:h-[380px] bg-blue-600/14 dark:bg-blue-600/14 rounded-full blur-[140px] animate-breathe-powerful"></div>
-        <div className="absolute bottom-1/4 left-1/3 w-40 sm:w-[320px] h-40 sm:h-[320px] bg-indigo-400/11 dark:bg-indigo-400/11 rounded-full blur-[140px] animate-breathe-strong"></div>
-        <div className="absolute top-3/4 right-1/2 w-52 sm:w-[360px] h-52 sm:h-[360px] bg-blue-700/13 dark:bg-blue-700/13 rounded-full blur-[140px] animate-breathe-mega"></div>
+    <div className="min-h-screen bg-black relative overflow-hidden transition-colors duration-500">
+      {/* Beautiful Gradient Background */}
+      <div className="absolute inset-0">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-blue-500/8 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-1/3 right-1/4 w-[600px] h-[400px] bg-cyan-400/6 rounded-full blur-[140px] animate-pulse"></div>
       </div>
+
+      {/* Header */}
+      <header className="relative z-10 border-b border-gray-800/50 bg-black/20 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center text-gray-300 hover:text-white transition-colors duration-200 font-mono"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            BACK_TO_SEARCH
+          </Link>
+
+          <Link href="/" className="text-2xl font-bold text-blue-400 font-mono">
+            FROXY
+          </Link>
+
+          <a
+            href="https://github.com/MultiX0/froxy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center px-4 py-2 text-sm text-gray-300 bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 rounded-full hover:bg-gray-700/40 hover:border-gray-600/50 hover:text-white transition-all duration-200 font-mono"
+          >
+            <Github className="w-4 h-4 mr-2" />
+            SOURCE_CODE
+          </a>
+        </div>
+      </header>
 
       {/* Main Content */}
-      <div className="relative z-10 w-full max-w-xl mx-auto text-center">
-        {/* Header Section */}
-        <div className="mb-10 sm:mb-12">
-          <h2 className="text-lg sm:text-xl md:text-2xl font-light text-gray-300 mb-6 tracking-wide opacity-90">
-            Ask Real Questions
-          </h2>
-          <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold text-white dark:text-white tracking-tight transition-colors duration-500">
-            <span className="bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 dark:from-blue-400 dark:via-blue-500 dark:to-cyan-400 bg-clip-text text-transparent drop-shadow-2xl animate-gradient-x bg-[length:200%_200%] glow-text">
-              FROXY
+      <main className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-12">
+        {/* Hero Section */}
+        <div className="text-center mb-16">
+          <h1 className="text-4xl sm:text-6xl font-bold text-white mb-6 tracking-tight">
+            <span className="bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 bg-clip-text text-transparent">
+              About FROXY
             </span>
           </h1>
+          <p className="text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed font-mono">
+            A powerful search engine designed to help developers find exactly what they're looking for.
+          </p>
         </div>
 
-        {/* Search Bar with Suggestions */}
-        <form onSubmit={handleSearch} className="mb-8 relative">
-          <div className="relative">
-            <div
-              className={`relative bg-gray-900/40 dark:bg-gray-900/40 backdrop-blur-xl border rounded-2xl sm:rounded-full transition-all duration-300 ${
-                isFocused
-                  ? "border-blue-500/50 shadow-lg shadow-blue-500/20 glow-border"
-                  : "border-gray-700/30 dark:border-gray-700/30 hover:border-gray-600/50 dark:hover:border-gray-600/50"
-              }`}
-            >
-              {/* Scanning line effect when focused */}
-              {isFocused && (
-                <div className="absolute inset-0 rounded-2xl sm:rounded-full overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-pulse"></div>
+        {/* Stats Section */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+          <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-6 text-center hover:border-gray-700/40 transition-all duration-300">
+            <Database className="w-8 h-8 text-blue-400 mx-auto mb-4" />
+            <div className="text-2xl font-bold text-white mb-2 font-mono">
+              {isLoadingCount ? (
+                <div className="flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin"></div>
                 </div>
+              ) : (
+                formatNumber(resultsCount)
               )}
-
-              <div className="flex items-center">
-                <div className="absolute left-4 sm:left-6 flex items-center space-x-2">
-                  <Search
-                    className={`w-5 h-5 transition-colors duration-300 ${
-                      isFocused ? "text-blue-400" : "text-gray-500 dark:text-gray-500"
-                    }`}
-                  />
-                  {isFocused && <Zap className="w-3 h-3 text-blue-400 animate-pulse" />}
-                </div>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setTimeout(() => setIsFocused(false), 200)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={currentPlaceholder}
-                  className={`w-full py-4 sm:py-5 pl-16 sm:pl-20 pr-12 sm:pr-16 bg-transparent text-white dark:text-white text-base sm:text-lg focus:outline-none focus:ring-0 focus:border-transparent transition-all duration-500 font-mono placeholder:transition-all placeholder:duration-400 placeholder:ease-in-out ${
-                    isTransitioning
-                      ? "placeholder:opacity-0 placeholder:transform placeholder:translate-y-2"
-                      : "placeholder:opacity-100 placeholder:transform placeholder:translate-y-0 placeholder-gray-400 dark:placeholder-gray-400"
-                  }`}
-                  style={{ outline: "none", boxShadow: "none" }}
-                />
-                <button
-                  type="submit"
-                  className={`absolute right-2 sm:right-3 p-2 sm:p-2.5 rounded-full transition-all duration-300 focus:outline-none focus:ring-0 ${
-                    searchQuery.length > 0
-                      ? "bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/25 glow-border"
-                      : "bg-gray-700/50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-400"
-                  }`}
-                >
-                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              </div>
             </div>
-
-            {/* Suggestions Dropdown */}
-            {suggestions.length > 0 && isFocused && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-gray-900/95 dark:bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 dark:border-gray-700/50 rounded-xl shadow-2xl overflow-hidden z-50">
-                {suggestions.map((suggestion, index) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => selectSuggestion(suggestion)}
-                    className={`w-full text-left px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base transition-colors duration-150 font-mono focus:outline-none focus:ring-0 ${
-                      index === selectedSuggestion
-                        ? "bg-blue-500/20 text-blue-300 dark:bg-blue-500/20 dark:text-blue-300"
-                        : "text-gray-300 dark:text-gray-300 hover:bg-gray-800/50 dark:hover:bg-gray-800/50 hover:text-white dark:hover:text-white"
-                    }`}
-                  >
-                    <Search className="inline w-4 h-4 mr-3 text-gray-500 dark:text-gray-500" />
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </form>
-
-        {/* Enhanced Quick Actions */}
-        <div className="flex flex-col items-center gap-6 mb-12 sm:mb-16">
-          {/* First row: GitHub and Online */}
-          <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
-            <a
-              href="https://github.com/MultiX0/froxy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-gray-300 dark:text-gray-300 bg-gray-800/30 dark:bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 dark:border-gray-700/30 rounded-full hover:bg-gray-700/40 dark:hover:bg-gray-700/40 hover:border-gray-600/50 dark:hover:border-gray-600/50 hover:text-white dark:hover:text-white transition-all duration-200 font-mono focus:outline-none focus:ring-0"
-            >
-              <Github className="w-4 h-4 mr-2" />
-              SOURCE_CODE
-            </a>
-            <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-blue-400/70 bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 rounded-full font-mono">
-              <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
-              ONLINE
-            </div>
+            <p className="text-gray-400 text-sm font-mono">INDEXED_RESULTS</p>
           </div>
 
-          {/* Second row: Results counter */}
-          <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-gray-300 dark:text-gray-300 bg-gray-800/20 dark:bg-gray-800/20 backdrop-blur-sm border border-gray-700/20 dark:border-gray-700/20 rounded-full transition-all duration-200 font-mono">
-            <span className="text-blue-400/80">~{formatNumber(resultsCount)}</span>
-            <span className="mx-1">results</span>
-            <span className="text-gray-500 text-xs">(soon to be much bigger)</span>
+          <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-6 text-center hover:border-gray-700/40 transition-all duration-300">
+            <Zap className="w-8 h-8 text-cyan-400 mx-auto mb-4" />
+            <div className="text-2xl font-bold text-white mb-2 font-mono">{"<50ms"}</div>
+            <p className="text-gray-400 text-sm font-mono">SEARCH_SPEED</p>
+          </div>
+
+          <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-6 text-center hover:border-gray-700/40 transition-all duration-300">
+            <Globe className="w-8 h-8 text-green-400 mx-auto mb-4" />
+            <div className="text-2xl font-bold text-white mb-2 font-mono">24/7</div>
+            <p className="text-gray-400 text-sm font-mono">AVAILABILITY</p>
           </div>
         </div>
-      </div>
 
-      {/* Enhanced Footer */}
-      <div className="absolute bottom-4 sm:bottom-8 left-0 right-0">
-        <div className="flex justify-center space-x-4 sm:space-x-8 text-xs sm:text-sm text-gray-500 dark:text-gray-500 px-4 font-mono">
-          <Link
-            href="/about"
-            className="hover:text-blue-400 transition-colors duration-200 focus:outline-none focus:ring-0"
-          >
-            ABOUT
-          </Link>
-          <Link
-            href="/privacy"
-            className="hover:text-blue-400 transition-colors duration-200 focus:outline-none focus:ring-0"
-          >
-            PRIVACY
-          </Link>
-          <Link
-            href="/terms"
-            className="hover:text-blue-400 transition-colors duration-200 focus:outline-none focus:ring-0"
-          >
-            TERMS
-          </Link>
+        {/* Features Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
+          <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 hover:border-gray-700/40 transition-all duration-300">
+            <Search className="w-10 h-10 text-blue-400 mb-6" />
+            <h3 className="text-xl font-bold text-white mb-4 font-mono">INTELLIGENT_SEARCH</h3>
+            <p className="text-gray-300 leading-relaxed font-mono text-sm">
+              Advanced search algorithms that understand context and provide relevant results for developers,
+              documentation, tutorials, and code examples.
+            </p>
+          </div>
+
+          <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 hover:border-gray-700/40 transition-all duration-300">
+            <Zap className="w-10 h-10 text-cyan-400 mb-6" />
+            <h3 className="text-xl font-bold text-white mb-4 font-mono">LIGHTNING_FAST</h3>
+            <p className="text-gray-300 leading-relaxed font-mono text-sm">
+              Optimized search infrastructure delivering results in milliseconds. No waiting, just instant access to the
+              information you need.
+            </p>
+          </div>
+
+          <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 hover:border-gray-700/40 transition-all duration-300">
+            <Database className="w-10 h-10 text-green-400 mb-6" />
+            <h3 className="text-xl font-bold text-white mb-4 font-mono">COMPREHENSIVE_INDEX</h3>
+            <p className="text-gray-300 leading-relaxed font-mono text-sm">
+              Continuously growing database of developer resources, documentation, tutorials, and community content from
+              across the web.
+            </p>
+          </div>
+
+          <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 hover:border-gray-700/40 transition-all duration-300">
+            <Users className="w-10 h-10 text-purple-400 mb-6" />
+            <h3 className="text-xl font-bold text-white mb-4 font-mono">DEVELOPER_FOCUSED</h3>
+            <p className="text-gray-300 leading-relaxed font-mono text-sm">
+              Built by developers, for developers. Understanding the unique needs of the programming community and
+              delivering targeted results.
+            </p>
+          </div>
         </div>
-      </div>
+
+        {/* Mission Section */}
+        <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 mb-16">
+          <h2 className="text-2xl font-bold text-white mb-6 text-center font-mono">OUR_MISSION</h2>
+          <p className="text-gray-300 leading-relaxed text-center max-w-3xl mx-auto font-mono">
+            To democratize access to developer knowledge by providing a fast, intelligent, and comprehensive search
+            experience. We believe that finding the right information shouldn't be a barrier to building amazing
+            software. FROXY is here to bridge that gap.
+          </p>
+        </div>
+
+        {/* Technology Section */}
+        <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8">
+          <h2 className="text-2xl font-bold text-white mb-6 text-center font-mono">TECHNOLOGY_STACK</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div className="p-4">
+              <div className="text-blue-400 font-mono font-bold">NEXT.JS</div>
+              <div className="text-gray-400 text-sm font-mono">Frontend</div>
+            </div>
+            <div className="p-4">
+              <div className="text-green-400 font-mono font-bold">NODE.JS</div>
+              <div className="text-gray-400 text-sm font-mono">Backend</div>
+            </div>
+            <div className="p-4">
+              <div className="text-purple-400 font-mono font-bold">ELASTICSEARCH</div>
+              <div className="text-gray-400 text-sm font-mono">Search Engine</div>
+            </div>
+            <div className="p-4">
+              <div className="text-cyan-400 font-mono font-bold">VERCEL</div>
+              <div className="text-gray-400 text-sm font-mono">Deployment</div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="relative z-10 border-t border-gray-800/50 py-8 mt-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+            <div className="text-gray-400 text-sm font-mono">© 2024 FROXY. Built with ❤️ for developers.</div>
+            <div className="flex space-x-6 text-xs text-gray-500 font-mono">
+              <Link href="/privacy" className="hover:text-blue-400 transition-colors duration-200">
+                PRIVACY
+              </Link>
+              <Link href="/terms" className="hover:text-blue-400 transition-colors duration-200">
+                TERMS
+              </Link>
+              <a
+                href="https://github.com/MultiX0/froxy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-blue-400 transition-colors duration-200"
+              >
+                GITHUB
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

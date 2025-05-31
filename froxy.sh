@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Colors
 BLUE='\033[94m'
 CYAN='\033[96m'
 GREEN='\033[92m'
@@ -10,10 +9,11 @@ WHITE='\033[97m'
 GRAY='\033[90m'
 RESET='\033[0m'
 
-# Global variables to track what needs cleanup
 NEEDS_CLEANUP=false
 INDEXER_BACKUP_EXISTS=false
 GO_BACKUP_EXISTS=false
+# Store the project root directory
+PROJECT_ROOT="$(pwd)"
 
 draw_logo() {
     echo -e ""
@@ -31,17 +31,14 @@ draw_logo() {
     echo -e ""
 }
 
-# Function to check if database is running
 check_database_status() {
     echo -e "${CYAN}Checking database...${RESET}"
     
-    # Check if Docker is running
     if ! docker info > /dev/null 2>&1; then
         echo -e "${RED}Docker not running${RESET}"
         return 1
     fi
     
-    # Check if PostgreSQL container is running
     if docker ps --format "table {{.Names}}" | grep -q "postgres\|db"; then
         echo -e "${GREEN}✓ Database running${RESET}"
         return 0
@@ -51,34 +48,31 @@ check_database_status() {
     fi
 }
 
-# Function to start local database
 start_local_database() {
     echo -e "${YELLOW}Starting local database...${RESET}"
     
-    if [ ! -d "db" ]; then
+    if [ ! -d "${PROJECT_ROOT}/db" ]; then
         echo -e "${RED}Error: 'db' directory not found${RESET}"
         echo -e "${YELLOW}Run from froxy project root${RESET}"
         return 1
     fi
     
     echo -e "${CYAN}Starting Docker Compose...${RESET}"
-    cd db
+    cd "${PROJECT_ROOT}/db"
     
-    # Start Docker Compose
     if docker compose up -d --build; then
         echo -e "${GREEN}✓ Database started${RESET}"
         echo -e "${CYAN}Waiting for ready...${RESET}"
         sleep 5
-        cd ..
+        cd "${PROJECT_ROOT}"
         return 0
     else
         echo -e "${RED}✗ Failed to start database${RESET}"
-        cd ..
+        cd "${PROJECT_ROOT}"
         return 1
     fi
 }
 
-# Function to prompt user about database
 prompt_database_setup() {
     echo -e "${WHITE}┌─ Database Status ──────────────────┐${RESET}"
     
@@ -125,39 +119,42 @@ prompt_database_setup() {
     fi
 }
 
-# Comprehensive cleanup function
 cleanup_files() {
     if [ "$NEEDS_CLEANUP" = true ]; then
         echo -e "\n${YELLOW}Cleaning up...${RESET}"
         
-        # Restore indexer file
-        INDEXER_FILE="indexer-search/lib/services/indexer.js"
+        INDEXER_FILE="${PROJECT_ROOT}/indexer-search/lib/services/indexer.js"
         if [ "$INDEXER_BACKUP_EXISTS" = true ] && [ -f "${INDEXER_FILE}.backup" ]; then
+            rm -f "$INDEXER_FILE"
             mv "${INDEXER_FILE}.backup" "$INDEXER_FILE"
             echo -e "${GREEN}✓ Restored indexer.js${RESET}"
-            INDEXER_BACKUP_EXISTS=false # Reset flag after cleanup
+            INDEXER_BACKUP_EXISTS=false
         fi
         
-        # Restore Go file
-        if [ "$GO_BACKUP_EXISTS" = true ] && [ -f "spider/main_backup.go" ]; then
-            mv "spider/main_backup.go" "spider/main.go"
+        GO_FILE="${PROJECT_ROOT}/spider/main.go"
+        GO_BACKUP="${PROJECT_ROOT}/spider/main_backup.go"
+        if [ "$GO_BACKUP_EXISTS" = true ] && [ -f "$GO_BACKUP" ]; then
+            rm -f "$GO_FILE" || echo -e "${RED}Failed to remove main.go${RESET}"
+            mv "$GO_BACKUP" "$GO_FILE" || echo -e "${RED}Failed to restore main_backup.go to main.go${RESET}"
             echo -e "${GREEN}✓ Restored spider/main.go${RESET}"
-            GO_BACKUP_EXISTS=false # Reset flag after cleanup
+            GO_BACKUP_EXISTS=false
         fi
         
         echo -e "${GREEN}✓ Cleanup completed${RESET}"
-        NEEDS_CLEANUP=false # Reset global cleanup flag
+        NEEDS_CLEANUP=false
+    else
+        echo -e "${YELLOW}No cleanup needed${RESET}"
     fi
 }
 
-# Signal handler for interrupts
 handle_interrupt() {
     echo -e "\n${YELLOW}Interrupted by user${RESET}"
+    cd "${PROJECT_ROOT}"
     cleanup_files
+    echo -e "${CYAN}Exiting...${RESET}"
     exit 130
 }
 
-# Set the global trap once at the beginning of the script's execution
 trap 'handle_interrupt' INT TERM
 
 show_menu() {
@@ -177,7 +174,6 @@ start_crawling() {
     clear
     draw_logo
     
-    # Check database before starting crawler
     prompt_database_setup
     
     clear
@@ -218,8 +214,7 @@ start_crawling() {
     echo -e ""
     echo -e "${GREEN}Starting crawler with $url_count URLs...${RESET}"
 
-    # Create a temporary Go file with the provided URLs
-    cat > spider/main_temp.go << EOF
+    cat > "${PROJECT_ROOT}/spider/main_temp.go" << EOF
 package main
 
 import (
@@ -271,28 +266,30 @@ func main() {
 EOF
 
     echo -e "${GREEN}Updating spider/main.go...${RESET}"
-    if [ -f spider/main.go ]; then
-        cp spider/main.go spider/main_backup.go
-        GO_BACKUP_EXISTS=true # Set this global flag
-        NEEDS_CLEANUP=true # Set this global flag
+    GO_FILE="${PROJECT_ROOT}/spider/main.go"
+    GO_BACKUP="${PROJECT_ROOT}/spider/main_backup.go"
+    if [ -f "$GO_FILE" ]; then
+        cp "$GO_FILE" "$GO_BACKUP" || {
+            echo -e "${RED}Failed to back up main.go${RESET}"
+            return 1
+        }
+        GO_BACKUP_EXISTS=true
+        NEEDS_CLEANUP=true
         echo -e "${GREEN}✓ Backed up original main.go${RESET}"
     fi
-    mv spider/main_temp.go spider/main.go
+    mv "${PROJECT_ROOT}/spider/main_temp.go" "$GO_FILE" || {
+        echo -e "${RED}Failed to update main.go${RESET}"
+        return 1
+    }
 
     echo -e "${GREEN}Running crawler...${RESET}"
     echo -e "${GRAY}──────────────────────────────${RESET}"
-    cd spider
-    go run main.go
+    cd "${PROJECT_ROOT}/spider"
+    go run main.go &
+    CRAWLER_PID=$!
+    wait $CRAWLER_PID
     CRAWLER_EXIT_CODE=$?
-    cd ..
-
-    # Instead of restoring here, let cleanup_files handle it.
-    # This block is now removed:
-    # if [ "$GO_BACKUP_EXISTS" = true ] && [ -f "spider/main_backup.go" ]; then
-    #     mv "spider/main_backup.go" "spider/main.go"
-    #     echo -e "${GREEN}✓ Restored original main.go${RESET}"
-    #     GO_BACKUP_EXISTS=false
-    # fi
+    cd "${PROJECT_ROOT}"
 
     if [ $CRAWLER_EXIT_CODE -eq 0 ]; then
         echo -e ""
@@ -306,8 +303,6 @@ EOF
     read -n 1
     clear
     
-    # After the task is done, trigger cleanup.
-    # This ensures cleanup happens even if not interrupted.
     cleanup_files
 }
 
@@ -315,7 +310,6 @@ start_indexer() {
     clear
     draw_logo
     
-    # Check database before starting indexer
     prompt_database_setup
     
     clear
@@ -327,8 +321,7 @@ start_indexer() {
 
     echo -e "${GREEN}Preparing indexer...${RESET}"
     
-    # Backup and modify the indexer file
-    INDEXER_FILE="indexer-search/lib/services/indexer.js"
+    INDEXER_FILE="${PROJECT_ROOT}/indexer-search/lib/services/indexer.js"
     
     if [ ! -f "$INDEXER_FILE" ]; then
         echo -e "${RED}Error: Indexer file not found${RESET}"
@@ -338,13 +331,14 @@ start_indexer() {
         return
     fi
     
-    # Create backup
-    cp "$INDEXER_FILE" "${INDEXER_FILE}.backup"
-    INDEXER_BACKUP_EXISTS=true # Set this global flag
-    NEEDS_CLEANUP=true # Set this global flag
+    cp "$INDEXER_FILE" "${INDEXER_FILE}.backup" || {
+        echo -e "${RED}Failed to back up indexer.js${RESET}"
+        return 1
+    }
+    INDEXER_BACKUP_EXISTS=true
+    NEEDS_CLEANUP=true
     echo -e "${GREEN}✓ Backed up indexer.js${RESET}"
     
-    # Uncomment the execution block
     sed -i 's|^// Run if called directly|// Run if called directly|g' "$INDEXER_FILE"
     sed -i 's|^// if (require\.main === module) {|if (require.main === module) {|g' "$INDEXER_FILE"
     sed -i 's|^//   calculateTfIdfInBatches()|  calculateTfIdfInBatches()|g' "$INDEXER_FILE"
@@ -361,20 +355,13 @@ start_indexer() {
     echo -e "${GREEN}✓ Modified indexer for execution${RESET}"
     echo -e "${GRAY}──────────────────────────────${RESET}"
 
-    # Execute indexer
-    cd indexer-search/lib/services
+    cd "${PROJECT_ROOT}/indexer-search/lib/services"
     echo -e "${GREEN}Running indexer...${RESET}"
-    node indexer.js
+    node indexer.js &
+    INDEXER_PID=$!
+    wait $INDEXER_PID
     INDEXER_EXIT_CODE=$?
-    cd ../../..
-
-    # Instead of restoring here, let cleanup_files handle it.
-    # This block is now removed:
-    # if [ "$INDEXER_BACKUP_EXISTS" = true ] && [ -f "${INDEXER_FILE}.backup" ]; then
-    #     mv "${INDEXER_FILE}.backup" "$INDEXER_FILE"
-    #     echo -e "${GREEN}✓ Restored original indexer.js${RESET}"
-    #     INDEXER_BACKUP_EXISTS=false
-    # fi
+    cd "${PROJECT_ROOT}"
 
     if [ $INDEXER_EXIT_CODE -eq 0 ]; then
         echo -e ""
@@ -388,7 +375,6 @@ start_indexer() {
     read -n 1
     clear
     
-    # After the task is done, trigger cleanup.
     cleanup_files
 }
 
@@ -440,12 +426,11 @@ quit_app() {
     draw_logo
     echo -e "${GREEN}Thank you for using Froxy!${RESET}"
     echo -e ""
-    cleanup_files  # Clean up before exiting
+    cleanup_files
     sleep 1
     exit 0
 }
 
-# Main loop
 main() {
     while true; do
         clear
@@ -474,5 +459,4 @@ main() {
     done
 }
 
-# Start the application
 main

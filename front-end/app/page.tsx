@@ -64,8 +64,9 @@ export default function FroxySearch() {
   const [placeholderIndex, setPlaceholderIndex] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const router = useRouter()
-  const [resultsCount, setResultsCount] = useState(64000)
+  const [resultsCount, setResultsCount] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const [isLoadingCount, setIsLoadingCount] = useState(true)
 
   // Initialize with random placeholder
   useEffect(() => {
@@ -155,15 +156,39 @@ export default function FroxySearch() {
     router.push(`/search?q=${encodeURIComponent(suggestion.trim())}`)
   }
 
+  // Fetch results count from our backend API
+  useEffect(() => {
+    const fetchResultsCount = async () => {
+      try {
+        setIsLoadingCount(true)
+        const response = await fetch("/api/results-count")
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        const data = await response.json()
+        setResultsCount(data.count || 0)
+      } catch (error) {
+        console.error("Failed to fetch results count:", error)
+        setResultsCount(64000) // fallback
+      } finally {
+        setIsLoadingCount(false)
+      }
+    }
+
+    fetchResultsCount()
+  }, [])
+
   return (
     <div className="min-h-screen bg-black dark:bg-black relative overflow-hidden flex flex-col items-center justify-center px-4 transition-colors duration-500">
       {/* Animated Background Spheres */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-64 sm:w-[400px] h-64 sm:h-[400px] bg-blue-500/15 dark:bg-blue-500/15 rounded-full blur-[140px] animate-breathe-dramatic"></div>
-        <div className="absolute bottom-1/3 right-1/4 w-52 sm:w-[350px] h-52 sm:h-[350px] bg-cyan-400/12 dark:bg-cyan-400/12 rounded-full blur-[140px] animate-breathe-intense"></div>
-        <div className="absolute top-1/2 right-1/3 w-48 sm:w-[380px] h-48 sm:h-[380px] bg-blue-600/14 dark:bg-blue-600/14 rounded-full blur-[140px] animate-breathe-powerful"></div>
-        <div className="absolute bottom-1/4 left-1/3 w-40 sm:w-[320px] h-40 sm:h-[320px] bg-indigo-400/11 dark:bg-indigo-400/11 rounded-full blur-[140px] animate-breathe-strong"></div>
-        <div className="absolute top-3/4 right-1/2 w-52 sm:w-[360px] h-52 sm:h-[360px] bg-blue-700/13 dark:bg-blue-700/13 rounded-full blur-[140px] animate-breathe-mega"></div>
+        <div className="absolute top-1/4 left-1/4 w-64 sm:w-[400px] h-64 sm:h-[400px] bg-blue-500/15 dark:bg-blue-500/15 rounded-full blur-[140px] animate-pulse"></div>
+        <div className="absolute bottom-1/3 right-1/4 w-52 sm:w-[350px] h-52 sm:h-[350px] bg-cyan-400/12 dark:bg-cyan-400/12 rounded-full blur-[140px] animate-pulse"></div>
+        <div className="absolute top-1/2 right-1/3 w-48 sm:w-[380px] h-48 sm:h-[380px] bg-blue-600/14 dark:bg-blue-600/14 rounded-full blur-[140px] animate-pulse"></div>
+        <div className="absolute bottom-1/4 left-1/3 w-40 sm:w-[320px] h-40 sm:h-[320px] bg-indigo-400/11 dark:bg-indigo-400/11 rounded-full blur-[140px] animate-pulse"></div>
+        <div className="absolute top-3/4 right-1/2 w-52 sm:w-[360px] h-52 sm:h-[360px] bg-blue-700/13 dark:bg-blue-700/13 rounded-full blur-[140px] animate-pulse"></div>
       </div>
 
       {/* Main Content */}
@@ -174,7 +199,7 @@ export default function FroxySearch() {
             Ask Real Questions
           </h2>
           <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold text-white dark:text-white tracking-tight transition-colors duration-500">
-            <span className="bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 dark:from-blue-400 dark:via-blue-500 dark:to-cyan-400 bg-clip-text text-transparent drop-shadow-2xl animate-gradient-x bg-[length:200%_200%] glow-text">
+            <span className="bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 dark:from-blue-400 dark:via-blue-500 dark:to-cyan-400 bg-clip-text text-transparent drop-shadow-2xl">
               FROXY
             </span>
           </h1>
@@ -186,7 +211,7 @@ export default function FroxySearch() {
             <div
               className={`relative bg-gray-900/40 dark:bg-gray-900/40 backdrop-blur-xl border rounded-2xl sm:rounded-full transition-all duration-300 ${
                 isFocused
-                  ? "border-blue-500/50 shadow-lg shadow-blue-500/20 glow-border"
+                  ? "border-blue-500/50 shadow-lg shadow-blue-500/20"
                   : "border-gray-700/30 dark:border-gray-700/30 hover:border-gray-600/50 dark:hover:border-gray-600/50"
               }`}
             >
@@ -232,7 +257,7 @@ export default function FroxySearch() {
                   type="submit"
                   className={`absolute right-2 sm:right-3 p-2 sm:p-2.5 rounded-full transition-all duration-300 outline-none focus:outline-none focus:ring-0 ${
                     searchQuery.length > 0
-                      ? "bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/25 glow-border"
+                      ? "bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/25"
                       : "bg-gray-700/50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-400"
                   }`}
                   style={{ outline: "none", boxShadow: "none" }}
@@ -288,9 +313,18 @@ export default function FroxySearch() {
 
           {/* Second row: Results counter */}
           <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-gray-300 dark:text-gray-300 bg-gray-800/20 dark:bg-gray-800/20 backdrop-blur-sm border border-gray-700/20 dark:border-gray-700/20 rounded-full transition-all duration-200 font-mono">
-            <span className="text-blue-400/80">~{formatNumber(resultsCount)}</span>
-            <span className="mx-1">results</span>
-            <span className="text-gray-500 text-xs">(soon to be much bigger)</span>
+            {isLoadingCount ? (
+              <>
+                <div className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mr-2"></div>
+                <span className="text-gray-400">Loading...</span>
+              </>
+            ) : (
+              <>
+                <span className="text-blue-400/80">~{formatNumber(resultsCount)}</span>
+                <span className="mx-1">results</span>
+                <span className="text-gray-500 text-xs">(and growing)</span>
+              </>
+            )}
           </div>
         </div>
       </div>
