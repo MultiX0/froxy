@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { Search, Github, ArrowRight, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -65,7 +65,6 @@ export default function FroxySearch() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const router = useRouter()
   const [resultsCount, setResultsCount] = useState(64000)
-  const searchInputRef = useRef<HTMLInputElement>(null)
 
   // Initialize with random placeholder
   useEffect(() => {
@@ -106,25 +105,6 @@ export default function FroxySearch() {
     }
     setSelectedSuggestion(-1)
   }, [searchQuery])
-
-  // Remove outline on focus
-  useEffect(() => {
-    const handleFocus = () => {
-      if (searchInputRef.current) {
-        searchInputRef.current.style.outline = "none"
-        searchInputRef.current.style.boxShadow = "none"
-        searchInputRef.current.style.borderColor = "transparent"
-      }
-    }
-
-    const input = searchInputRef.current
-    if (input) {
-      input.addEventListener("focus", handleFocus)
-      return () => {
-        input.removeEventListener("focus", handleFocus)
-      }
-    }
-  }, [])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -207,7 +187,6 @@ export default function FroxySearch() {
                   {isFocused && <Zap className="w-3 h-3 text-blue-400 animate-pulse" />}
                 </div>
                 <input
-                  ref={searchInputRef}
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -215,27 +194,20 @@ export default function FroxySearch() {
                   onBlur={() => setTimeout(() => setIsFocused(false), 200)}
                   onKeyDown={handleKeyDown}
                   placeholder={currentPlaceholder}
-                  className={`w-full py-4 sm:py-5 pl-16 sm:pl-20 pr-12 sm:pr-16 bg-transparent text-white dark:text-white text-base sm:text-lg outline-none focus:outline-none focus:ring-0 focus:border-transparent active:outline-none transition-all duration-500 font-mono placeholder:transition-all placeholder:duration-400 placeholder:ease-in-out ${
+                  className={`w-full py-4 sm:py-5 pl-16 sm:pl-20 pr-12 sm:pr-16 bg-transparent text-white dark:text-white text-base sm:text-lg focus:outline-none focus:ring-0 focus:border-transparent transition-all duration-500 font-mono placeholder:transition-all placeholder:duration-400 placeholder:ease-in-out ${
                     isTransitioning
                       ? "placeholder:opacity-0 placeholder:transform placeholder:translate-y-2"
                       : "placeholder:opacity-100 placeholder:transform placeholder:translate-y-0 placeholder-gray-400 dark:placeholder-gray-400"
                   }`}
-                  style={{
-                    outline: "none",
-                    boxShadow: "none",
-                    WebkitAppearance: "none",
-                    MozAppearance: "none",
-                    appearance: "none",
-                  }}
+                  style={{ outline: "none", boxShadow: "none" }}
                 />
                 <button
                   type="submit"
-                  className={`absolute right-2 sm:right-3 p-2 sm:p-2.5 rounded-full transition-all duration-300 outline-none focus:outline-none focus:ring-0 ${
+                  className={`absolute right-2 sm:right-3 p-2 sm:p-2.5 rounded-full transition-all duration-300 focus:outline-none focus:ring-0 ${
                     searchQuery.length > 0
                       ? "bg-blue-500 hover:bg-blue-600 text-white shadow-lg shadow-blue-500/25 glow-border"
                       : "bg-gray-700/50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-400"
                   }`}
-                  style={{ outline: "none", boxShadow: "none" }}
                 >
                   <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
@@ -250,12 +222,11 @@ export default function FroxySearch() {
                     key={suggestion}
                     type="button"
                     onClick={() => selectSuggestion(suggestion)}
-                    className={`w-full text-left px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base transition-colors duration-150 font-mono outline-none focus:outline-none focus:ring-0 ${
+                    className={`w-full text-left px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base transition-colors duration-150 font-mono focus:outline-none focus:ring-0 ${
                       index === selectedSuggestion
                         ? "bg-blue-500/20 text-blue-300 dark:bg-blue-500/20 dark:text-blue-300"
                         : "text-gray-300 dark:text-gray-300 hover:bg-gray-800/50 dark:hover:bg-gray-800/50 hover:text-white dark:hover:text-white"
                     }`}
-                    style={{ outline: "none", boxShadow: "none" }}
                   >
                     <Search className="inline w-4 h-4 mr-3 text-gray-500 dark:text-gray-500" />
                     {suggestion}
@@ -274,8 +245,7 @@ export default function FroxySearch() {
               href="https://github.com/MultiX0/froxy"
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-gray-300 dark:text-gray-300 bg-gray-800/30 dark:bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 dark:border-gray-700/30 rounded-full hover:bg-gray-700/40 dark:hover:bg-gray-700/40 hover:border-gray-600/50 dark:hover:border-gray-600/50 hover:text-white dark:hover:text-white transition-all duration-200 font-mono outline-none focus:outline-none focus:ring-0"
-              style={{ outline: "none", boxShadow: "none" }}
+              className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-gray-300 dark:text-gray-300 bg-gray-800/30 dark:bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 dark:border-gray-700/30 rounded-full hover:bg-gray-700/40 dark:hover:bg-gray-700/40 hover:border-gray-600/50 dark:hover:border-gray-600/50 hover:text-white dark:hover:text-white transition-all duration-200 font-mono focus:outline-none focus:ring-0"
             >
               <Github className="w-4 h-4 mr-2" />
               SOURCE_CODE
@@ -300,22 +270,19 @@ export default function FroxySearch() {
         <div className="flex justify-center space-x-4 sm:space-x-8 text-xs sm:text-sm text-gray-500 dark:text-gray-500 px-4 font-mono">
           <Link
             href="/about"
-            className="hover:text-blue-400 transition-colors duration-200 outline-none focus:outline-none focus:ring-0"
-            style={{ outline: "none", boxShadow: "none" }}
+            className="hover:text-blue-400 transition-colors duration-200 focus:outline-none focus:ring-0"
           >
             ABOUT
           </Link>
           <Link
             href="/privacy"
-            className="hover:text-blue-400 transition-colors duration-200 outline-none focus:outline-none focus:ring-0"
-            style={{ outline: "none", boxShadow: "none" }}
+            className="hover:text-blue-400 transition-colors duration-200 focus:outline-none focus:ring-0"
           >
             PRIVACY
           </Link>
           <Link
             href="/terms"
-            className="hover:text-blue-400 transition-colors duration-200 outline-none focus:outline-none focus:ring-0"
-            style={{ outline: "none", boxShadow: "none" }}
+            className="hover:text-blue-400 transition-colors duration-200 focus:outline-none focus:ring-0"
           >
             TERMS
           </Link>

@@ -1,7 +1,8 @@
-// db/postgres.go
+// db/postgres.go - Improved version with better transaction and connection management
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -43,22 +44,25 @@ func InitPostgres() error {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
 
-	// Test the connection
+	// Test the connection with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	log.Println("Pinging database to verify connection...")
-	if err := db.Ping(); err != nil {
-		db.Close() // Close connection if ping fails
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
 		return fmt.Errorf("failed to ping database: %v", err)
 	}
 	log.Println("Successfully connected to PostgreSQL database.")
 
-	// Set connection pool settings
+	// Improved connection pool settings
 	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(25)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetMaxIdleConns(5)                  // Reduced idle connections
+	db.SetConnMaxLifetime(5 * time.Minute) // Connection lifetime
+	db.SetConnMaxIdleTime(2 * time.Minute) // Idle connection timeout
 
 	pgHandler = &PostgresHandler{db: db}
 
-	// Create tables if they don't exist
 	if err := pgHandler.createTables(); err != nil {
 		return fmt.Errorf("failed to create tables: %v", err)
 	}
@@ -71,8 +75,41 @@ func GetPostgresHandler() *PostgresHandler {
 	return pgHandler
 }
 
+// Context-aware transaction wrapper
+func (p *PostgresHandler) withTransaction(ctx context.Context, fn func(*sql.Tx) error) error {
+	tx, err := p.db.BeginTx(ctx, &sql.TxOptions{
+		Isolation: sql.LevelReadCommitted,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	committed := false
+	defer func() {
+		if !committed {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Printf("ERROR: Failed to rollback transaction: %v", rbErr)
+			}
+		}
+	}()
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	committed = true
+
+	return nil
+}
+
 func (p *PostgresHandler) createTables() error {
-	// Match the exact schema provided
+	// Use context with timeout for table creation
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	createPagesTable := `
     CREATE TABLE IF NOT EXISTS pages (
         id SERIAL PRIMARY KEY,
@@ -148,158 +185,141 @@ func (p *PostgresHandler) createTables() error {
 		createTermsTable,
 	}
 
-	// Create tables
+	// Create tables with context
 	for _, query := range tables {
-		if _, err := p.db.Exec(query); err != nil {
+		if _, err := p.db.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("failed to create table: %v", err)
 		}
 	}
 
-	// Create indexes
+	// Create indexes with context
 	for _, query := range createIndexes {
-		if _, err := p.db.Exec(query); err != nil {
+		if _, err := p.db.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("failed to create index: %v", err)
 		}
 	}
 
-	log.Println("Database tables and indexes created successfully by Go app (if not existing).")
+	log.Println("Database tables and indexes created successfully.")
 	return nil
 }
 
 func (p *PostgresHandler) UpsertPageData(pageData models.PageData) error {
-	tx, err := p.db.Begin()
-	if err != nil {
-		log.Printf("DEBUG: Failed to begin transaction for URL %s: %v", pageData.URL, err)
-		return fmt.Errorf("failed to begin transaction: %v", err)
-	}
+	// Use context with timeout for the entire operation
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	// Flag to track if commit happened, so rollback is conditionally executed.
-	committed := false
-	defer func() {
-		if !committed {
-			log.Printf("DEBUG: Rolling back transaction for URL %s due to error or panic.", pageData.URL)
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("ERROR: Failed to rollback transaction for URL %s: %v", pageData.URL, rbErr)
+	return p.withTransaction(ctx, func(tx *sql.Tx) error {
+		// Prepare nullable last_modified for DB insertion
+		var lastModified sql.NullTime
+		if !pageData.LastModified.IsZero() {
+			lastModified = sql.NullTime{Time: pageData.LastModified, Valid: true}
+		}
+
+		// Convert response time to milliseconds for storage
+		responseTimeMs := int(pageData.ResponseTime.Milliseconds())
+
+		// Upsert page data with context
+		var pageID int
+		upsertPageQuery := `
+            INSERT INTO pages (
+                url, title, meta_description, meta_keywords, language, canonical,
+                content, word_count, status_code, response_time, content_type,
+                last_modified, crawl_date, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+            ON CONFLICT (url) DO UPDATE SET
+                title = EXCLUDED.title,
+                meta_description = EXCLUDED.meta_description,
+                meta_keywords = EXCLUDED.meta_keywords,
+                language = EXCLUDED.language,
+                canonical = EXCLUDED.canonical,
+                content = EXCLUDED.content,
+                word_count = EXCLUDED.word_count,
+                status_code = EXCLUDED.status_code,
+                response_time = EXCLUDED.response_time,
+                content_type = EXCLUDED.content_type,
+                last_modified = EXCLUDED.last_modified,
+                crawl_date = EXCLUDED.crawl_date,
+                updated_at = CURRENT_TIMESTAMP
+            RETURNING id;`
+
+		err := tx.QueryRowContext(ctx, upsertPageQuery,
+			pageData.URL,
+			pageData.Title,
+			pageData.MetaDescription,
+			pageData.MetaKeywords,
+			pageData.Language,
+			pageData.Canonical,
+			pageData.MainContent,
+			pageData.WordCount,
+			pageData.StatusCode,
+			responseTimeMs,
+			pageData.ContentType,
+			lastModified,
+			pageData.CrawlDate,
+		).Scan(&pageID)
+
+		if err != nil {
+			log.Printf("ERROR: Failed to upsert page data for URL %s: %v", pageData.URL, err)
+			return fmt.Errorf("failed to upsert page data: %w", err)
+		}
+
+		// Delete existing related data before re-inserting
+		deleteQueries := []string{
+			"DELETE FROM page_headings WHERE page_id = $1",
+			"DELETE FROM links WHERE from_page_id = $1",
+		}
+
+		for _, query := range deleteQueries {
+			if _, err := tx.ExecContext(ctx, query, pageID); err != nil {
+				log.Printf("ERROR: Failed to delete existing data for page ID %d: %v", pageID, err)
+				return fmt.Errorf("failed to delete existing data: %w", err)
 			}
 		}
-	}()
 
-	// Prepare nullable last_modified for DB insertion
-	var lastModified sql.NullTime
-	if !pageData.LastModified.IsZero() {
-		lastModified = sql.NullTime{Time: pageData.LastModified, Valid: true}
-	}
-
-	// Convert response time to milliseconds for storage
-	responseTimeMs := int(pageData.ResponseTime.Milliseconds())
-
-	// Upsert page data - using correct column names
-	var pageID int
-	upsertPageQuery := `
-        INSERT INTO pages (
-            url, title, meta_description, meta_keywords, language, canonical,
-            content, word_count, status_code, response_time, content_type,
-            last_modified, crawl_date, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
-        ON CONFLICT (url) DO UPDATE SET
-            title = EXCLUDED.title,
-            meta_description = EXCLUDED.meta_description,
-            meta_keywords = EXCLUDED.meta_keywords,
-            language = EXCLUDED.language,
-            canonical = EXCLUDED.canonical,
-            content = EXCLUDED.content,
-            word_count = EXCLUDED.word_count,
-            status_code = EXCLUDED.status_code,
-            response_time = EXCLUDED.response_time,
-            content_type = EXCLUDED.content_type,
-            last_modified = EXCLUDED.last_modified,
-            crawl_date = EXCLUDED.crawl_date,
-            updated_at = CURRENT_TIMESTAMP
-        RETURNING id;`
-
-	err = tx.QueryRow(upsertPageQuery,
-		pageData.URL,
-		pageData.Title,
-		pageData.MetaDescription,
-		pageData.MetaKeywords,
-		pageData.Language,
-		pageData.Canonical,
-		pageData.MainContent, // Maps to 'content' in DB
-		pageData.WordCount,
-		pageData.StatusCode,
-		responseTimeMs, // Stored as INTEGER milliseconds
-		pageData.ContentType,
-		lastModified, // sql.NullTime
-		pageData.CrawlDate,
-	).Scan(&pageID)
-
-	if err != nil {
-		log.Printf("ERROR: Failed to upsert page data for URL %s (main pages table): %v", pageData.URL, err)
-		return fmt.Errorf("failed to upsert page data: %w", err)
-	}
-
-	// Delete existing related data before re-inserting
-	deleteQueries := []string{
-		"DELETE FROM page_headings WHERE page_id = $1",
-		"DELETE FROM links WHERE from_page_id = $1",
-	}
-
-	for _, query := range deleteQueries {
-		if _, err := tx.Exec(query, pageID); err != nil {
-			log.Printf("ERROR: Failed to delete existing data for page ID %d, query: %s: %v", pageID, query, err)
-			return fmt.Errorf("failed to delete existing data: %w", err)
-		}
-	}
-
-	// Insert headings - using correct table and column names
-	if len(pageData.Headings) > 0 {
-		for tag, texts := range pageData.Headings {
-			for _, text := range texts {
-				// Check for heading_type length
+		// Insert headings in batch if possible
+		if len(pageData.Headings) > 0 {
+			for tag, texts := range pageData.Headings {
 				if len(tag) > 10 {
-					log.Printf("WARNING: Heading type '%s' exceeds 10 characters. It will be truncated or fail insertion. Skipping.", tag)
+					log.Printf("WARNING: Heading type '%s' exceeds 10 characters, skipping", tag)
 					continue
 				}
-				_, err := tx.Exec("INSERT INTO page_headings (page_id, heading_type, text) VALUES ($1, $2, $3)",
-					pageID, tag, text)
-				if err != nil {
-					log.Printf("ERROR: Failed to insert heading for page ID %d (tag: %s, text: %s): %v", pageID, tag, text, err)
-					return fmt.Errorf("failed to insert heading: %w", err)
+				for _, text := range texts {
+					_, err := tx.ExecContext(ctx, "INSERT INTO page_headings (page_id, heading_type, text) VALUES ($1, $2, $3)",
+						pageID, tag, text)
+					if err != nil {
+						log.Printf("ERROR: Failed to insert heading for page ID %d: %v", pageID, err)
+						return fmt.Errorf("failed to insert heading: %w", err)
+					}
 				}
 			}
 		}
-	}
 
-	// Insert outbound links - using correct column names
-	if len(pageData.OutboundLinks) > 0 {
-		for _, link := range pageData.OutboundLinks {
-			_, err := tx.Exec("INSERT INTO links (from_page_id, to_url, anchor_text, link_type) VALUES ($1, $2, $3, $4)",
-				pageID, link.URL, link.Text, "external")
-			if err != nil {
-				log.Printf("ERROR: Failed to insert link for page ID %d (URL: %s): %v", pageID, link.URL, err)
-				return fmt.Errorf("failed to insert link: %w", err)
+		// Insert outbound links in batch if possible
+		if len(pageData.OutboundLinks) > 0 {
+			for _, link := range pageData.OutboundLinks {
+				_, err := tx.ExecContext(ctx, "INSERT INTO links (from_page_id, to_url, anchor_text, link_type) VALUES ($1, $2, $3, $4)",
+					pageID, link.URL, link.Text, "external")
+				if err != nil {
+					log.Printf("ERROR: Failed to insert link for page ID %d: %v", pageID, err)
+					return fmt.Errorf("failed to insert link: %w", err)
+				}
 			}
 		}
-	}
 
-	// ONLY COMMIT IF ALL ABOVE OPERATIONS SUCCEEDED
-	if err := tx.Commit(); err != nil {
-		log.Printf("ERROR: Failed to commit transaction for URL %s: %v", pageData.URL, err)
-		return fmt.Errorf("failed to commit transaction: %v", err)
-	}
-	committed = true // Mark as committed so deferred rollback doesn't run
-
-	log.Printf("Successfully stored page data for %s (ID: %d)", pageData.URL, pageID)
-	return nil
+		log.Printf("Successfully stored page data for %s (ID: %d)", pageData.URL, pageID)
+		return nil
+	})
 }
 
 func (p *PostgresHandler) GetPageByURL(url string) (*models.PageData, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	pageData := &models.PageData{
 		Headings:      make(map[string][]string),
 		OutboundLinks: make([]models.Link, 0),
 	}
 
-	// Get page data from the 'pages' table - using correct column names
 	var pageID int
 	var lastModified sql.NullTime
 	var responseTimeMs int
@@ -309,86 +329,129 @@ func (p *PostgresHandler) GetPageByURL(url string) (*models.PageData, error) {
                last_modified, crawl_date, created_at, updated_at
         FROM pages WHERE url = $1`
 
-	err := p.db.QueryRow(query, url).Scan(
+	err := p.db.QueryRowContext(ctx, query, url).Scan(
 		&pageID, &pageData.URL, &pageData.Title, &pageData.MetaDescription,
 		&pageData.MetaKeywords, &pageData.Language, &pageData.Canonical,
-		&pageData.MainContent, // Maps to 'content' in DB
-		&pageData.WordCount, &pageData.StatusCode,
-		&responseTimeMs, // Stored as INTEGER milliseconds
-		&pageData.ContentType, &lastModified, &pageData.CrawlDate,
+		&pageData.MainContent, &pageData.WordCount, &pageData.StatusCode,
+		&responseTimeMs, &pageData.ContentType, &lastModified, &pageData.CrawlDate,
 		&pageData.CrawlDate, &pageData.LastModified,
 	)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil // No page found
+			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to get page data from pages table for URL %s: %w", url, err)
+		return nil, fmt.Errorf("failed to get page data: %w", err)
 	}
 
 	if lastModified.Valid {
 		pageData.LastModified = lastModified.Time
 	} else {
-		pageData.LastModified = time.Time{} // Ensure zero time if NULL
+		pageData.LastModified = time.Time{}
 	}
 
-	// Convert response time from milliseconds to duration
 	pageData.ResponseTime = time.Duration(responseTimeMs) * time.Millisecond
 
-	// Get headings from the 'page_headings' table - using correct column names
+	// Get headings with context
 	headingsQuery := "SELECT heading_type, text FROM page_headings WHERE page_id = $1 ORDER BY id"
-	rows, err := p.db.Query(headingsQuery, pageID)
+	rows, err := p.db.QueryContext(ctx, headingsQuery, pageID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get headings for page ID %d: %w", pageID, err)
+		return nil, fmt.Errorf("failed to get headings: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var tag, text string
 		if err := rows.Scan(&tag, &text); err != nil {
-			return nil, fmt.Errorf("failed to scan heading row for page ID %d: %w", pageID, err)
+			return nil, fmt.Errorf("failed to scan heading: %w", err)
 		}
 		pageData.Headings[tag] = append(pageData.Headings[tag], text)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating heading rows for page ID %d: %w", pageID, err)
+		return nil, fmt.Errorf("error iterating headings: %w", err)
 	}
 
-	// Get outbound links from the 'links' table - using correct column names
+	// Get outbound links with context
 	linksQuery := "SELECT to_url, anchor_text FROM links WHERE from_page_id = $1 ORDER BY id"
-	rows, err = p.db.Query(linksQuery, pageID)
+	rows, err = p.db.QueryContext(ctx, linksQuery, pageID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get links for page ID %d: %w", pageID, err)
+		return nil, fmt.Errorf("failed to get links: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var link models.Link
 		if err := rows.Scan(&link.URL, &link.Text); err != nil {
-			return nil, fmt.Errorf("failed to scan link row for page ID %d: %w", pageID, err)
+			return nil, fmt.Errorf("failed to scan link: %w", err)
 		}
 		pageData.OutboundLinks = append(pageData.OutboundLinks, link)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating link rows for page ID %d: %w", pageID, err)
+		return nil, fmt.Errorf("error iterating links: %w", err)
 	}
 
 	return pageData, nil
 }
 
 func (p *PostgresHandler) GetPageCount() (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	var count int
-	err := p.db.QueryRow("SELECT COUNT(*) FROM pages").Scan(&count)
+	err := p.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pages").Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get page count: %w", err)
 	}
 	return count, nil
 }
 
+// Health check method to verify database connectivity
+func (p *PostgresHandler) HealthCheck() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := p.db.PingContext(ctx); err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
+	}
+	return nil
+}
+
 func (p *PostgresHandler) Close() error {
 	if p.db != nil {
-		log.Println("Closing database connection from db.Close()...")
+		log.Println("Closing database connection...")
 		return p.db.Close()
 	}
 	return nil
+}
+
+// Graceful shutdown helper
+func (p *PostgresHandler) GracefulShutdown(timeout time.Duration) error {
+	if p.db == nil {
+		return nil
+	}
+
+	// Create a context with timeout for graceful shutdown
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// Channel to signal completion
+	done := make(chan error, 1)
+
+	go func() {
+		log.Println("Initiating graceful database shutdown...")
+		done <- p.db.Close()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			log.Printf("Error during database shutdown: %v", err)
+		} else {
+			log.Println("Database connection closed successfully")
+		}
+		return err
+	case <-ctx.Done():
+		log.Println("Database shutdown timeout reached, forcing close")
+		return fmt.Errorf("database shutdown timeout")
+	}
 }

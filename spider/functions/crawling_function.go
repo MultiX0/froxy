@@ -1,15 +1,18 @@
 package functions
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/froxy/db"
@@ -20,14 +23,18 @@ import (
 )
 
 type Crawler struct {
-	BaseDomain  string
-	LinksQueue  *[]models.Link
-	VisitedUrls map[string]struct{}
-	QueuedUrls  map[string]bool
-	Mu          *sync.Mutex
+	BaseDomain   string
+	LinksQueue   *[]models.Link
+	VisitedUrls  map[string]struct{}
+	QueuedUrls   map[string]bool
+	Mu           *sync.Mutex
+	Ctx          context.Context
+	cancel       context.CancelFunc
+	shutdownChan chan os.Signal
 }
 
 var robotsCache = make(map[string]*robotstxt.RobotsData)
+var robotsCacheMu sync.RWMutex
 
 var (
 	timesleep    = time.Second
@@ -35,17 +42,51 @@ var (
 	pagesCrawled = 0
 )
 
+// NewCrawler creates a new crawler instance with proper initialization
+func NewCrawler() *Crawler {
+	ctx, cancel := context.WithCancel(context.Background())
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Pre-initialize the LinksQueue slice
+	linksQueue := make([]models.Link, 0)
+
+	crawler := &Crawler{
+		QueuedUrls:   make(map[string]bool),
+		VisitedUrls:  make(map[string]struct{}),
+		Mu:           &sync.Mutex{},
+		LinksQueue:   &linksQueue,
+		Ctx:          ctx,
+		cancel:       cancel,
+		shutdownChan: shutdownChan,
+	}
+
+	// Validate initialization
+	if crawler.Mu == nil {
+		log.Fatal("Failed to initialize mutex")
+	}
+	if crawler.LinksQueue == nil {
+		log.Fatal("Failed to initialize LinksQueue")
+	}
+
+	return crawler
+}
+
 func (c *Crawler) Start(workerCount int, seedUrls ...string) {
+	// Validate crawler state
+	if c == nil {
+		log.Fatal("Crawler instance is nil")
+		return
+	}
+	if c.Mu == nil {
+		log.Fatal("Crawler mutex is nil")
+		return
+	}
+
 	if len(seedUrls) == 0 {
 		log.Println("No seed URLs provided.")
 		return
 	}
-
-	c.QueuedUrls = make(map[string]bool)
-	c.VisitedUrls = make(map[string]struct{})
-
-	c.Mu = &sync.Mutex{}
-	c.LinksQueue = &[]models.Link{}
 
 	if parsedURL, err := url.Parse(seedUrls[0]); err == nil {
 		c.BaseDomain = parsedURL.Host
@@ -58,18 +99,27 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 
 	var wg sync.WaitGroup
 
+	// Start shutdown monitor
+	go c.monitorShutdown()
+
+	// Start workers
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			defer func() {
-				log.Printf("Worker %d exiting", id)
-			}()
+			defer log.Printf("Worker %d exiting", id)
 
 			consecutiveEmptyAttempts := 0
 			maxEmptyAttempts := 10
 
 			for {
+				select {
+				case <-c.Ctx.Done():
+					log.Printf("Worker %d: Shutdown signal received", id)
+					return
+				default:
+				}
+
 				link, ok := c.safeDequeue()
 				if !ok {
 					consecutiveEmptyAttempts++
@@ -79,18 +129,28 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 					}
 
 					log.Printf("Worker %d: No work, waiting... (attempt %d/%d)", id, consecutiveEmptyAttempts, maxEmptyAttempts)
-					time.Sleep(5 * time.Second)
-					continue
+
+					select {
+					case <-c.Ctx.Done():
+						return
+					case <-time.After(5 * time.Second):
+						continue
+					}
 				}
 
 				consecutiveEmptyAttempts = 0
 
 				log.Printf("Worker %d: Processing %s", id, link.URL)
-				err := c.CrawlPage(link.URL)
-				if err != nil {
+				if err := c.CrawlPage(link.URL); err != nil {
 					log.Printf("Worker %d: Error crawling %s: %v", id, link.URL, err)
 				}
-				time.Sleep(timesleep)
+
+				select {
+				case <-c.Ctx.Done():
+					return
+				case <-time.After(timesleep):
+					// Continue to next iteration
+				}
 			}
 		}(i)
 	}
@@ -99,7 +159,26 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 	log.Printf("All workers finished. Total pages crawled: %d", pagesCrawled)
 }
 
+func (c *Crawler) monitorShutdown() {
+	<-c.shutdownChan
+	log.Println("Shutdown signal received. Initiating graceful shutdown...")
+	c.cancel()
+
+	// Give workers time to finish current operations
+	go func() {
+		time.Sleep(10 * time.Second)
+		log.Println("Graceful shutdown timeout reached, forcing exit")
+		os.Exit(1)
+	}()
+}
+
 func (c *Crawler) safeDequeue() (models.Link, bool) {
+	// Add nil checks for safety
+	if c == nil || c.Mu == nil || c.LinksQueue == nil || c.QueuedUrls == nil {
+		log.Printf("ERROR: Crawler or its components are nil in safeDequeue")
+		return models.Link{}, false
+	}
+
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
 
@@ -109,11 +188,11 @@ func (c *Crawler) safeDequeue() (models.Link, bool) {
 
 	link, newQueue, err := utils.Dequeue(*c.LinksQueue)
 	if err != nil {
+		log.Printf("ERROR: Failed to dequeue: %v", err)
 		return models.Link{}, false
 	}
 
 	*c.LinksQueue = newQueue
-
 	delete(c.QueuedUrls, link.URL)
 
 	log.Printf("Dequeued: %s, Queue size: %d", link.URL, len(*c.LinksQueue))
@@ -121,6 +200,28 @@ func (c *Crawler) safeDequeue() (models.Link, bool) {
 }
 
 func (c *Crawler) safeEnqueue(link models.Link) {
+	// Add comprehensive nil checks
+	if c == nil {
+		log.Printf("ERROR: Crawler instance is nil")
+		return
+	}
+	if c.Mu == nil {
+		log.Printf("ERROR: Crawler mutex is nil")
+		return
+	}
+	if c.LinksQueue == nil {
+		log.Printf("ERROR: Crawler LinksQueue is nil")
+		return
+	}
+	if c.QueuedUrls == nil {
+		log.Printf("ERROR: Crawler QueuedUrls is nil")
+		return
+	}
+	if c.VisitedUrls == nil {
+		log.Printf("ERROR: Crawler VisitedUrls is nil")
+		return
+	}
+
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
 
@@ -158,20 +259,22 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 	domain := parsedURL.Host
 	targetPath := parsedURL.Path
 
-	err = c.CheckingRobotsRules((protocol + domain), targetPath)
-	if err != nil {
+	if err := c.CheckingRobotsRules((protocol + domain), targetPath); err != nil {
 		log.Printf("Robots.txt blocked %s: %v", websiteUrl, err)
 		return fmt.Errorf("robots.txt blocked: %w", err)
 	}
 
+	// Create context with timeout for this request
+	ctx, cancel := context.WithTimeout(c.Ctx, 30*time.Second)
+	defer cancel()
+
 	startTime := time.Now()
 
-	timeout := time.Duration(10 * time.Second)
-	client := http.Client{
-		Timeout: timeout,
+	client := &http.Client{
+		Timeout: 15 * time.Second,
 	}
 
-	request, err := http.NewRequest("GET", websiteUrl, nil)
+	request, err := http.NewRequestWithContext(ctx, "GET", websiteUrl, nil)
 	if err != nil {
 		log.Printf("Failed to create request for %s: %v", websiteUrl, err)
 		return fmt.Errorf("failed to create request: %w", err)
@@ -195,7 +298,9 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 		return fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 	}
 
-	bodyData, err := io.ReadAll(resp.Body)
+	// Limit body size to prevent memory issues
+	limitedReader := io.LimitReader(resp.Body, 10*1024*1024) // 10MB limit
+	bodyData, err := io.ReadAll(limitedReader)
 	if err != nil {
 		log.Printf("Failed to read body for %s: %v", websiteUrl, err)
 		return fmt.Errorf("failed to read body: %w", err)
@@ -207,28 +312,71 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 		return fmt.Errorf("failed to extract page data: %w", err)
 	}
 
-	maxRetries := 3
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		err = c.storePageData(pageData)
-		if err == nil {
-			break
-		}
-
-		log.Printf("Attempt %d/%d failed to store page data for %s: %v", attempt, maxRetries, websiteUrl, err)
-
-		if attempt < maxRetries {
-			waitTime := time.Duration(attempt) * time.Second
-			time.Sleep(waitTime)
-		}
-	}
-
-	if err != nil {
-		log.Printf("Failed to store page data after %d attempts for %s: %v", maxRetries, websiteUrl, err)
-		return fmt.Errorf("failed to store page data after retries: %w", err)
+	// Store data with retry logic and exponential backoff
+	if err := c.storePageDataWithRetry(pageData, 3); err != nil {
+		log.Printf("Failed to store page data after retries for %s: %v", websiteUrl, err)
+		return fmt.Errorf("failed to store page data: %w", err)
 	}
 
 	log.Printf("Successfully processed %s, found %d outbound links", websiteUrl, len(pageData.OutboundLinks))
 	return nil
+}
+
+func (c *Crawler) storePageDataWithRetry(pageData *models.PageData, maxRetries int) error {
+	pageData.MainContent = c.cleanContent(pageData.MainContent)
+
+	log.Printf("Storing page data for: %s (Title: %s, Words: %d, Links: %d)",
+		pageData.URL, pageData.Title, pageData.WordCount, len(pageData.OutboundLinks))
+
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Check if context is cancelled before each attempt
+		select {
+		case <-c.Ctx.Done():
+			return fmt.Errorf("operation cancelled")
+		default:
+		}
+
+		// Check database health before attempting to store
+		if err := db.GetPostgresHandler().HealthCheck(); err != nil {
+			log.Printf("Database health check failed before storing %s (attempt %d): %v", pageData.URL, attempt, err)
+			lastErr = err
+
+			if attempt < maxRetries {
+				backoffTime := time.Duration(attempt*attempt) * time.Second
+				log.Printf("Retrying in %v...", backoffTime)
+
+				select {
+				case <-c.Ctx.Done():
+					return fmt.Errorf("operation cancelled during backoff")
+				case <-time.After(backoffTime):
+					continue
+				}
+			}
+			continue
+		}
+
+		err := db.GetPostgresHandler().UpsertPageData(*pageData)
+		if err == nil {
+			log.Printf("Successfully stored page data for: %s", pageData.URL)
+			return nil
+		}
+
+		lastErr = err
+		log.Printf("Attempt %d/%d failed to store page data for %s: %v", attempt, maxRetries, pageData.URL, err)
+
+		if attempt < maxRetries {
+			backoffTime := time.Duration(attempt*attempt) * time.Second
+			select {
+			case <-c.Ctx.Done():
+				return fmt.Errorf("operation cancelled during backoff")
+			case <-time.After(backoffTime):
+				continue
+			}
+		}
+	}
+
+	return fmt.Errorf("failed to store page data after %d attempts: %w", maxRetries, lastErr)
 }
 
 func (c *Crawler) extractPageData(htmlContent, url, domain, protocol string, resp *http.Response, responseTime time.Duration) (*models.PageData, error) {
@@ -321,8 +469,21 @@ func (c *Crawler) extractMetaData(n *html.Node, pageData *models.PageData) {
 	}
 }
 
-func (c *Crawler) extractLinkData(linkNode *html.Node, pageData *models.PageData, domain, protocol string) {
+func (c *Crawler) isInIgnoredElement(n *html.Node) bool {
+	current := n.Parent
+	for current != nil {
+		if current.Type == html.ElementNode {
+			switch current.Data {
+			case "nav", "footer", "aside", "script", "style", "noscript", "header":
+				return true
+			}
+		}
+		current = current.Parent
+	}
+	return false
+}
 
+func (c *Crawler) extractLinkData(linkNode *html.Node, pageData *models.PageData, domain, protocol string) {
 	if rel := c.getAttributeValue(linkNode, "rel"); strings.Contains(rel, "nofollow") {
 		return
 	}
@@ -353,15 +514,25 @@ func (c *Crawler) extractLinkData(linkNode *html.Node, pageData *models.PageData
 		URL:  cleanURL,
 	})
 
-	if parsedURL, err := url.Parse(cleanURL); err == nil {
-		if parsedURL.Host == c.BaseDomain {
-			log.Printf("Found same-domain link: %s", cleanURL)
-			link := models.Link{Text: linkText, URL: cleanURL}
-			c.safeEnqueue(link)
-		} else {
-			log.Printf("Skipping external link: %s (host: %s, base: %s)", cleanURL, parsedURL.Host, c.BaseDomain)
+	if _, err := url.Parse(cleanURL); err == nil {
+		link := models.Link{Text: linkText, URL: cleanURL}
+		c.safeEnqueue(link)
+	}
+}
+
+func (c *Crawler) getAttributeValue(n *html.Node, attrName string) string {
+	for _, attr := range n.Attr {
+		if attr.Key == attrName {
+			return attr.Val
 		}
 	}
+	return ""
+}
+
+func (c *Crawler) extractTextContent(n *html.Node) string {
+	var text strings.Builder
+	c.extractTextOnly(n, &text)
+	return strings.TrimSpace(text.String())
 }
 
 func (c *Crawler) constructFullURL(href, domain, protocol string) string {
@@ -376,13 +547,7 @@ func (c *Crawler) constructFullURL(href, domain, protocol string) string {
 	}
 }
 
-func (c *Crawler) extractTextContent(n *html.Node) string {
-	var text strings.Builder
-	c.extractTextOnly(n, &text)
-	return strings.TrimSpace(text.String())
-}
-
-func (crawler *Crawler) extractTextOnly(n *html.Node, builder *strings.Builder) {
+func (c *Crawler) extractTextOnly(n *html.Node, builder *strings.Builder) {
 	if n.Type == html.TextNode {
 		text := strings.TrimSpace(n.Data)
 		if text != "" {
@@ -393,51 +558,12 @@ func (crawler *Crawler) extractTextOnly(n *html.Node, builder *strings.Builder) 
 		}
 	}
 
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		crawler.extractTextOnly(c, builder)
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		c.extractTextOnly(child, builder)
 	}
-}
-
-func (c *Crawler) getAttributeValue(n *html.Node, attrName string) string {
-	for _, attr := range n.Attr {
-		if attr.Key == attrName {
-			return attr.Val
-		}
-	}
-	return ""
-}
-
-func (c *Crawler) isInIgnoredElement(n *html.Node) bool {
-	current := n.Parent
-	for current != nil {
-		if current.Type == html.ElementNode {
-			switch current.Data {
-			case "nav", "footer", "aside", "script", "style", "noscript", "header":
-				return true
-			}
-		}
-		current = current.Parent
-	}
-	return false
-}
-
-func (c *Crawler) storePageData(pageData *models.PageData) error {
-	pageData.MainContent = c.cleanContent(pageData.MainContent)
-
-	log.Printf("Storing page data for: %s (Title: %s, Words: %d, Links: %d)",
-		pageData.URL, pageData.Title, pageData.WordCount, len(pageData.OutboundLinks))
-
-	err := db.GetPostgresHandler().UpsertPageData(*pageData)
-	if err != nil {
-		return fmt.Errorf("failed to store page data in database: %w", err)
-	}
-
-	log.Printf("Successfully stored page data for: %s", pageData.URL)
-	return nil
 }
 
 func (c *Crawler) cleanContent(content string) string {
-
 	re := regexp.MustCompile(`\s+`)
 	content = re.ReplaceAllString(content, " ")
 
@@ -448,7 +574,11 @@ func (c *Crawler) cleanContent(content string) string {
 }
 
 func (c *Crawler) CheckingRobotsRules(domain string, targetPath string) error {
-	if robotsData, ok := robotsCache[domain]; ok {
+	robotsCacheMu.RLock()
+	robotsData, exists := robotsCache[domain]
+	robotsCacheMu.RUnlock()
+
+	if exists {
 		group := robotsData.FindGroup("*")
 		if !group.Test(targetPath) {
 			return fmt.Errorf("blocked by robots.txt: %s", targetPath)
@@ -466,7 +596,7 @@ func (c *Crawler) CheckingRobotsRules(domain string, targetPath string) error {
 		return nil
 	}
 
-	robotsData, err := robotstxt.FromResponse(resp)
+	robotsData, err = robotstxt.FromResponse(resp)
 	if err != nil {
 		return fmt.Errorf("failed to parse robots.txt: %v", err)
 	}
@@ -478,11 +608,19 @@ func (c *Crawler) CheckingRobotsRules(domain string, targetPath string) error {
 		return fmt.Errorf("not allowed to fetch %s (blocked by robots.txt)", targetPath)
 	}
 
+	robotsCacheMu.Lock()
 	robotsCache[domain] = robotsData
+	robotsCacheMu.Unlock()
+
 	return nil
 }
 
 func (c *Crawler) addToSeen(url string) {
+	if c == nil || c.Mu == nil || c.VisitedUrls == nil {
+		log.Printf("ERROR: Cannot add to seen - crawler components are nil")
+		return
+	}
+
 	c.Mu.Lock()
 	defer c.Mu.Unlock()
 	c.VisitedUrls[url] = struct{}{}

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/froxy/db"
 	"github.com/froxy/functions"
@@ -23,10 +25,14 @@ func main() {
 		log.Println(err)
 	}
 
+	defer db.GetPostgresHandler().Close()
+
 	crawler := functions.Crawler{
 		LinksQueue:  &[]models.Link{},
 		VisitedUrls: map[string]struct{}{},
 		QueuedUrls:  map[string]bool{},
+		Mu:          &sync.Mutex{},
+		Ctx:         context.Background(),
 	}
 
 	var crawlableSites = []string{
@@ -143,7 +149,7 @@ func main() {
 	}
 
 	crawler.Start(
-		15,
+		5,
 		crawlableSites...,
 	)
 
