@@ -40,17 +40,33 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get("/health", (req, res) => {
-  res.status(200).json({ status: "OK", timestamp: new Date() });
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    const { healthCheck } = require('./lib/services/db_service');
+    const isHealthy = await healthCheck();
+    
+    if (isHealthy) {
+      res.status(200).json({ 
+        status: 'healthy', 
+        timestamp: new Date().toISOString(),
+        database: 'connected'
+      });
+    } else {
+      res.status(503).json({ 
+        status: 'unhealthy', 
+        timestamp: new Date().toISOString(),
+        database: 'disconnected'
+      });
+    }
+  } catch (error) {
+    res.status(503).json({ 
+      status: 'error', 
+      timestamp: new Date().toISOString(),
+      error: error.message 
+    });
+  }
 });
-
-let indexingStatus = {
-  isRunning: false,
-  progress: 0,
-  message: 'Ready',
-  startTime: null,
-  error: null
-};
 
 app.get("/indexing-tracked", async (req, res) => {
   try {
