@@ -110,7 +110,7 @@ app.get("/indexing-status", (req, res) => {
 });
 
 
-// app.use(apiKeyChecker);
+app.use(apiKeyChecker);
 
 app.get('/search', async(req,res) => searchAPI(req,res));
 
