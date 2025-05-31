@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/froxy/db"
 	"github.com/froxy/functions"
@@ -25,7 +26,7 @@ func main() {
 		log.Println(err)
 	}
 
-	defer db.GetPostgresHandler().Close()
+	defer db.GetPostgresHandler().GracefulShutdown(time.Second * 5)
 
 	crawler := functions.Crawler{
 		LinksQueue:  &[]models.Link{},
