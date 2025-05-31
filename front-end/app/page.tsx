@@ -6,6 +6,9 @@ import { Search, Github, ArrowRight, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
+// TODO in the future make suggestions from the backend using levenshtein distance
+
+
 const searchSuggestions = [
   "JavaScript frameworks",
   "React best practices",

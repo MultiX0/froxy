@@ -182,15 +182,15 @@ export default function AboutPage() {
             </div>
             <div className="p-4">
               <div className="text-green-400 font-mono font-bold">NODE.JS</div>
-              <div className="text-gray-400 text-sm font-mono">Backend</div>
+              <div className="text-gray-400 text-sm font-mono">Indexer/Search</div>
             </div>
             <div className="p-4">
-              <div className="text-purple-400 font-mono font-bold">ELASTICSEARCH</div>
-              <div className="text-gray-400 text-sm font-mono">Search Engine</div>
+              <div className="text-purple-400 font-mono font-bold">GO</div>
+              <div className="text-gray-400 text-sm font-mono">Spider</div>
             </div>
             <div className="p-4">
-              <div className="text-cyan-400 font-mono font-bold">VERCEL</div>
-              <div className="text-gray-400 text-sm font-mono">Deployment</div>
+              <div className="text-cyan-400 font-mono font-bold">POSTGRESQL</div>
+              <div className="text-gray-400 text-sm font-mono">Database</div>
             </div>
           </div>
         </div>

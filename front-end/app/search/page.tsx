@@ -17,6 +17,8 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
+// TODO in the future make suggestions from the backend using levenshtein distance
+
 const searchSuggestions = [
   "JavaScript frameworks",
   "React best practices",
@@ -346,186 +348,188 @@ export default function SearchResults() {
       )}
 
       {/* Main Content */}
-      <main
-        className={`relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-6 flex-1 ${showSuggestions ? "pointer-events-none" : ""}`}
-      >
-        {/* Search Info */}
-        {metadata && (
-          <div className="mb-6 text-gray-400 text-sm font-mono">
-            <p>
-              Found {metadata.totalResults} results for{" "}
-              <span className="text-blue-400 font-medium">"{metadata.query}"</span>
-              <span className="ml-2 text-gray-500">({metadata.searchTime}ms)</span>
-              {results.length > resultsPerPage && (
-                <span className="ml-2">
-                  (Showing {(currentPage - 1) * resultsPerPage + 1}-
-                  {Math.min(currentPage * resultsPerPage, results.length)} of {results.length})
-                </span>
-              )}
-            </p>
-          </div>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
-            <span className="ml-3 text-gray-400 font-mono">Searching...</span>
-          </div>
-        )}
-
-        {/* Error State */}
-        {error && (
-          <div className="text-center py-12">
-            <p className="text-red-400 text-lg font-mono">{error}</p>
-            <button
-              onClick={() => fetchSearchResults(query)}
-              className="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors duration-200 font-mono"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
-
-        {/* Search Results */}
-        {!loading && !error && (
-          <div className="space-y-6">
-            {paginatedResults.length > 0
-              ? paginatedResults.map((result, index) => (
-                  <div
-                    key={result.id}
-                    className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-4 sm:p-6 hover:border-gray-700/40 hover:bg-gray-900/30 transition-all duration-300"
-                  >
-                    <div className="flex flex-col">
-                      <div className="flex items-start justify-between">
-                        <a
-                          href={result.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-lg sm:text-xl font-medium text-blue-400 hover:text-blue-300 hover:underline mb-2 flex items-center"
-                        >
-                          {result.title}
-                          <ExternalLink className="ml-2 w-4 h-4 opacity-70" />
-                        </a>
-                      </div>
-                      <p className="text-gray-400 text-sm mb-1 font-mono">{result.url}</p>
-                      <p className="text-gray-300 text-sm sm:text-base mt-2">{result.description}</p>
-
-                      {/* Matched Terms */}
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        {result.matchedTerms.map((term: string) => (
-                          <span
-                            key={term}
-                            className="text-xs px-2 py-1 bg-blue-500/10 text-blue-300 rounded-full border border-blue-500/20 font-mono"
-                          >
-                            {term}
-                          </span>
-                        ))}
-                      </div>
-
-                      {/* Search Metadata */}
-                      <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4 text-xs text-gray-400 font-mono">
-                        <div className="flex items-center">
-                          <FileText className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-                          <span>Score: {result.score.toFixed(1)}</span>
-                        </div>
-                        <div className="flex items-center">
-                          <Users className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-                          <span>Coverage: {result.termCoverage}%</span>
-                        </div>
-                        {Object.entries(result.debugging.termDetails).map(([term, details]) => (
-                          <div key={term} className="flex items-center">
-                            <Clock className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-                            <span>
-                              {term}: {details.frequency} matches
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ))
-              : !loading &&
-                query && (
-                  <div className="text-center py-12">
-                    <p className="text-gray-400 text-lg font-mono">No results found for "{query}"</p>
-                    <p className="text-gray-500 mt-2 font-mono">Try different keywords or check your spelling</p>
-                  </div>
+      <main className={`relative z-10 w-full px-4 sm:px-6 py-6 flex-1 flex justify-center ${showSuggestions ? "pointer-events-none" : ""}`}>
+        <div className="w-full max-w-none lg:max-w-[70%] xl:max-w-[70%]">
+          {/* Search Info */}
+          {metadata && (
+            <div className="mb-6 text-gray-400 text-sm font-mono">
+              <p>
+                Found {metadata.totalResults} results for{" "}
+                <span className="text-blue-400 font-medium">"{metadata.query}"</span>
+                <span className="ml-2 text-gray-500">({metadata.searchTime}ms)</span>
+                {results.length > resultsPerPage && (
+                  <span className="ml-2">
+                    (Showing {(currentPage - 1) * resultsPerPage + 1}-
+                    {Math.min(currentPage * resultsPerPage, results.length)} of {results.length})
+                  </span>
                 )}
-          </div>
-        )}
+              </p>
+            </div>
+          )}
 
-        {/* Pagination */}
-        {!loading && !error && totalPages > 1 && (
-          <div className="mt-10 flex justify-center">
-            <div className="flex items-center space-x-2">
+          {/* Loading State */}
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-400" />
+              <span className="ml-3 text-gray-400 font-mono">Searching...</span>
+            </div>
+          )}
+
+          {/* Error State */}
+          {error && (
+            <div className="text-center py-12">
+              <p className="text-red-400 text-lg font-mono">{error}</p>
               <button
-                onClick={() => goToPage(currentPage - 1)}
-                disabled={currentPage === 1}
-                className={`p-2 rounded-lg border border-gray-700/50 font-mono ${
-                  currentPage === 1
-                    ? "bg-gray-800/10 text-gray-600 cursor-not-allowed"
-                    : "bg-gray-800/30 text-gray-400 hover:bg-gray-700/50 hover:text-white"
-                } transition-all duration-200`}
+                onClick={() => fetchSearchResults(query)}
+                className="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors duration-200 font-mono"
               >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-
-              {[...Array(totalPages)].map((_, i) => {
-                const pageNum = i + 1
-                // Show current page, first, last, and pages around current
-                if (
-                  pageNum === 1 ||
-                  pageNum === totalPages ||
-                  (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
-                ) {
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => goToPage(pageNum)}
-                      className={`px-4 py-2 rounded-lg border font-mono ${
-                        pageNum === currentPage
-                          ? "border-blue-500/30 bg-blue-500/10 text-blue-400 font-medium"
-                          : "border-gray-700/50 bg-gray-800/30 text-gray-400 hover:bg-gray-700/50 hover:text-white"
-                      } transition-all duration-200`}
-                    >
-                      {pageNum}
-                    </button>
-                  )
-                } else if (
-                  (pageNum === currentPage - 2 && currentPage > 3) ||
-                  (pageNum === currentPage + 2 && currentPage < totalPages - 2)
-                ) {
-                  return (
-                    <span key={i} className="text-gray-500 font-mono">
-                      ...
-                    </span>
-                  )
-                }
-                return null
-              })}
-
-              <button
-                onClick={() => goToPage(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className={`p-2 rounded-lg border border-gray-700/50 font-mono ${
-                  currentPage === totalPages
-                    ? "bg-gray-800/10 text-gray-600 cursor-not-allowed"
-                    : "bg-gray-800/30 text-gray-400 hover:bg-gray-700/50 hover:text-white"
-                } transition-all duration-200`}
-              >
-                <ChevronRight className="w-5 h-5" />
+                Try Again
               </button>
             </div>
-          </div>
-        )}
+          )}
+
+          {/* Search Results */}
+          {!loading && !error && (
+            <div className="space-y-6">
+              {paginatedResults.length > 0
+                ? paginatedResults.map((result, index) => (
+                    <div
+                      key={result.id}
+                      className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-4 sm:p-6 hover:border-gray-700/40 hover:bg-gray-900/30 transition-all duration-300"
+                    >
+                      <div className="flex flex-col">
+                        <div className="flex items-start justify-between">
+                          <a
+                            href={result.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-lg sm:text-xl font-medium text-blue-400 hover:text-blue-300 hover:underline mb-2 flex items-center truncate max-w-full overflow-hidden"
+                          >
+                            <span className="truncate">{result.title}</span>
+                            <ExternalLink className="ml-2 w-4 h-4 opacity-70 flex-shrink-0" />
+                          </a>
+                        </div>
+                        <p className="text-gray-400 text-sm mb-1 font-mono truncate max-w-full overflow-hidden">
+                          {result.url}
+                        </p>
+                        <p className="text-gray-300 text-sm sm:text-base mt-2">{result.description}</p>
+
+                        {/* Matched Terms */}
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {result.matchedTerms.map((term: string) => (
+                            <span
+                              key={term}
+                              className="text-xs px-2 py-1 bg-blue-500/10 text-blue-300 rounded-full border border-blue-500/20 font-mono"
+                            >
+                              {term}
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Search Metadata */}
+                        <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4 text-xs text-gray-400 font-mono">
+                          <div className="flex items-center">
+                            <FileText className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                            <span>Score: {result.score.toFixed(1)}</span>
+                          </div>
+                          <div className="flex items-center">
+                            <Users className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                            <span>Coverage: {result.termCoverage}%</span>
+                          </div>
+                          {Object.entries(result.debugging.termDetails).map(([term, details]) => (
+                            <div key={term} className="flex items-center">
+                              <Clock className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                              <span>
+                                {term}: {details.frequency} matches
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                : !loading &&
+                  query && (
+                    <div className="text-center py-12">
+                      <p className="text-gray-400 text-lg font-mono">No results found for "{query}"</p>
+                      <p className="text-gray-500 mt-2 font-mono">Try different keywords or check your spelling</p>
+                    </div>
+                  )}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {!loading && !error && totalPages > 1 && (
+            <div className="mt-10 flex justify-center">
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => goToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className={`p-2 rounded-lg border border-gray-700/50 font-mono ${
+                    currentPage === 1
+                      ? "bg-gray-800/10 text-gray-600 cursor-not-allowed"
+                      : "bg-gray-800/30 text-gray-400 hover:bg-gray-700/50 hover:text-white"
+                  } transition-all duration-200`}
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+
+                {[...Array(totalPages)].map((_, i) => {
+                  const pageNum = i + 1
+                  // Show current page, first, last, and pages around current
+                  if (
+                    pageNum === 1 ||
+                    pageNum === totalPages ||
+                    (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                  ) {
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => goToPage(pageNum)}
+                        className={`px-4 py-2 rounded-lg border font-mono ${
+                          pageNum === currentPage
+                            ? "border-blue-500/30 bg-blue-500/10 text-blue-400 font-medium"
+                            : "border-gray-700/50 bg-gray-800/30 text-gray-400 hover:bg-gray-700/50 hover:text-white"
+                        } transition-all duration-200`}
+                      >
+                        {pageNum}
+                      </button>
+                    )
+                  } else if (
+                    (pageNum === currentPage - 2 && currentPage > 3) ||
+                    (pageNum === currentPage + 2 && currentPage < totalPages - 2)
+                  ) {
+                    return (
+                      <span key={i} className="text-gray-500 font-mono">
+                        ...
+                      </span>
+                    )
+                  }
+                  return null
+                })}
+
+                <button
+                  onClick={() => goToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className={`p-2 rounded-lg border border-gray-700/50 font-mono ${
+                    currentPage === totalPages
+                      ? "bg-gray-800/10 text-gray-600 cursor-not-allowed"
+                      : "bg-gray-800/30 text-gray-400 hover:bg-gray-700/50 hover:text-white"
+                  } transition-all duration-200`}
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </main>
 
       {/* Footer */}
       <footer
         className={`relative z-10 border-t border-gray-800/50 py-4 mt-10 ${showSuggestions ? "pointer-events-none" : ""}`}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="w-full px-4 sm:px-6">
           <div className="flex justify-center space-x-4 sm:space-x-8 text-xs text-gray-500 font-mono">
             <Link href="/about" className="hover:text-blue-400 transition-colors duration-200">
               ABOUT
