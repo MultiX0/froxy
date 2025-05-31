@@ -408,7 +408,7 @@ func (c *Crawler) storePageData(pageData *models.PageData) {
 	log.Printf("Storing page data for: %s (Title: %s, Words: %d, Links: %d)",
 		pageData.URL, pageData.Title, pageData.WordCount, len(pageData.OutboundLinks))
 
-	db.GetSupabaseHandler().UpsertPageData(*pageData)
+	db.GetPostgresHandler().UpsertPageData(*pageData)
 }
 
 func (c *Crawler) cleanContent(content string) string {
