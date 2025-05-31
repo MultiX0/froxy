@@ -143,6 +143,7 @@ func main() {
 	}
 
 	crawler.Start(
+		15,
 		crawlableSites...,
 	)
 
