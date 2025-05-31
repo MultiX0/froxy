@@ -15,3 +15,14 @@ services:
       - ./postgres_data:/var/lib/postgresql/data
       - ./db_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./db_indexes.sql:/docker-entrypoint-initdb.d/02_indexes.sql
+
+  pg_backup:
+    image: postgres:16
+    depends_on:
+      - postgres
+    volumes:
+      - ./pg_backups:/backups
+      - ./scripts/backup.sh:/backup.sh
+    env_file:
+      - .env
+    entrypoint: ["bash", "/backup.sh"]
