@@ -35,7 +35,7 @@ var (
 	pagesCrawled = 0
 )
 
-func (c *Crawler) Start(seedUrls ...string) {
+func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 	if len(seedUrls) == 0 {
 		log.Println("No seed URLs provided.")
 		return
@@ -57,7 +57,6 @@ func (c *Crawler) Start(seedUrls ...string) {
 	}
 
 	var wg sync.WaitGroup
-	workerCount := 5
 
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
@@ -87,7 +86,10 @@ func (c *Crawler) Start(seedUrls ...string) {
 				consecutiveEmptyAttempts = 0
 
 				log.Printf("Worker %d: Processing %s", id, link.URL)
-				c.CrawlPage(link.URL)
+				err := c.CrawlPage(link.URL)
+				if err != nil {
+					log.Printf("Worker %d: Error crawling %s: %v", id, link.URL, err)
+				}
 				time.Sleep(timesleep)
 			}
 		}(i)
@@ -136,31 +138,30 @@ func (c *Crawler) safeEnqueue(link models.Link) {
 	log.Printf("Enqueued: %s, Queue size: %d", link.URL, len(*c.LinksQueue))
 }
 
-func (c *Crawler) CrawlPage(websiteUrl string) {
+func (c *Crawler) CrawlPage(websiteUrl string) error {
 	log.Printf("Crawling: %s", websiteUrl)
 	pagesCrawled++
 	defer c.addToSeen(websiteUrl)
 
 	if _, visited := c.VisitedUrls[websiteUrl]; visited {
 		log.Printf("%s already visited, skipping", websiteUrl)
-		return
+		return nil
 	}
 
 	parsedURL, err := url.Parse(websiteUrl)
 	if err != nil {
 		log.Printf("Failed to parse URL %s: %v", websiteUrl, err)
-		return
+		return fmt.Errorf("failed to parse URL: %w", err)
 	}
 
 	protocol := parsedURL.Scheme + "://"
 	domain := parsedURL.Host
 	targetPath := parsedURL.Path
 
-	// Check robots.txt
 	err = c.CheckingRobotsRules((protocol + domain), targetPath)
 	if err != nil {
 		log.Printf("Robots.txt blocked %s: %v", websiteUrl, err)
-		return
+		return fmt.Errorf("robots.txt blocked: %w", err)
 	}
 
 	startTime := time.Now()
@@ -173,7 +174,7 @@ func (c *Crawler) CrawlPage(websiteUrl string) {
 	request, err := http.NewRequest("GET", websiteUrl, nil)
 	if err != nil {
 		log.Printf("Failed to create request for %s: %v", websiteUrl, err)
-		return
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	request.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
@@ -185,30 +186,49 @@ func (c *Crawler) CrawlPage(websiteUrl string) {
 
 	if err != nil {
 		log.Printf("Failed to fetch %s: %v", websiteUrl, err)
-		return
+		return fmt.Errorf("failed to fetch page: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Skipped %s, status: %d", websiteUrl, resp.StatusCode)
-		return
+		return fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 	}
 
 	bodyData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("Failed to read body for %s: %v", websiteUrl, err)
-		return
+		return fmt.Errorf("failed to read body: %w", err)
 	}
 
 	pageData, err := c.extractPageData(string(bodyData), websiteUrl, domain, protocol, resp, responseTime)
 	if err != nil {
 		log.Printf("Failed to extract page data for %s: %v", websiteUrl, err)
-		return
+		return fmt.Errorf("failed to extract page data: %w", err)
 	}
 
-	c.storePageData(pageData)
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err = c.storePageData(pageData)
+		if err == nil {
+			break
+		}
+
+		log.Printf("Attempt %d/%d failed to store page data for %s: %v", attempt, maxRetries, websiteUrl, err)
+
+		if attempt < maxRetries {
+			waitTime := time.Duration(attempt) * time.Second
+			time.Sleep(waitTime)
+		}
+	}
+
+	if err != nil {
+		log.Printf("Failed to store page data after %d attempts for %s: %v", maxRetries, websiteUrl, err)
+		return fmt.Errorf("failed to store page data after retries: %w", err)
+	}
 
 	log.Printf("Successfully processed %s, found %d outbound links", websiteUrl, len(pageData.OutboundLinks))
+	return nil
 }
 
 func (c *Crawler) extractPageData(htmlContent, url, domain, protocol string, resp *http.Response, responseTime time.Duration) (*models.PageData, error) {
@@ -401,14 +421,19 @@ func (c *Crawler) isInIgnoredElement(n *html.Node) bool {
 	return false
 }
 
-func (c *Crawler) storePageData(pageData *models.PageData) {
-	// Clean the main content
+func (c *Crawler) storePageData(pageData *models.PageData) error {
 	pageData.MainContent = c.cleanContent(pageData.MainContent)
 
 	log.Printf("Storing page data for: %s (Title: %s, Words: %d, Links: %d)",
 		pageData.URL, pageData.Title, pageData.WordCount, len(pageData.OutboundLinks))
 
-	db.GetPostgresHandler().UpsertPageData(*pageData)
+	err := db.GetPostgresHandler().UpsertPageData(*pageData)
+	if err != nil {
+		return fmt.Errorf("failed to store page data in database: %w", err)
+	}
+
+	log.Printf("Successfully stored page data for: %s", pageData.URL)
+	return nil
 }
 
 func (c *Crawler) cleanContent(content string) string {
