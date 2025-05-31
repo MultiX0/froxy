@@ -66,7 +66,7 @@ const query = async (text, params, retries = 3) => {
             console.error(`Database query error (attempt ${attempt}/${retries}):`, {
                 message: error.message,
                 code: error.code,
-                query: text.substring(0, 100) + '...'
+                query: text.toString().substring(0, 100) + '...'
             });
             
             // If this isn't the last attempt, wait before retrying
@@ -120,8 +120,7 @@ const closePool = async () => {
     try {
         console.log('Closing database pool...');
         await pool.end();
-        console.log('PostgreSQL pool has ended gracefully');
-        return;
+        process.exit(-1);
     } catch (error) {
         console.error('Error closing pool:', error);
     }

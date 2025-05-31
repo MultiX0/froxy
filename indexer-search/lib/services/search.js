@@ -5,7 +5,7 @@ const termCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 
 /**
- * search function with aggregated TF-IDF scoring
+ * Parallel search function with aggregated TF-IDF scoring
  * @param {string} query - The search query
  * @param {Object} options - Search options
  * @param {number} options.limit - Maximum number of results to return (default: 10)
@@ -40,6 +40,86 @@ async function cachedSearchUseQuery(searchQuery, options = {}) {
   return results;
 }
 
+/**
+ * Process page scoring in chunks for better performance
+ */
+function processPageScoresInChunks(termPageData, matchingTerms, boost, chunkSize = 1000) {
+  return new Promise((resolve) => {
+    const pageScores = new Map();
+    const pageTermMatches = new Map();
+    const termLookup = new Map(matchingTerms.map((t) => [t.id, t.term]));
+    
+    const chunks = [];
+    for (let i = 0; i < termPageData.length; i += chunkSize) {
+      chunks.push(termPageData.slice(i, i + chunkSize));
+    }
+
+    // Process chunks using setTimeout to avoid blocking
+    let processedChunks = 0;
+    
+    const processChunk = (chunk) => {
+      for (const entry of chunk) {
+        const { page_id, term_id, tf_idf, field, term_frequency } = entry;
+        const pageId = parseInt(page_id);
+        const termName = termLookup.get(parseInt(term_id));
+
+        // Apply field boosting
+        const fieldBoost = boost[field] || 1.0;
+        const boostedScore = parseFloat(tf_idf) * fieldBoost;
+
+        // Initialize page data if needed
+        if (!pageScores.has(pageId)) {
+          pageScores.set(pageId, {
+            totalScore: 0,
+            termCount: 0,
+            termDetails: new Map(),
+            maxScore: 0,
+          });
+        }
+
+        const pageData = pageScores.get(pageId);
+        pageData.totalScore += boostedScore;
+        pageData.termCount += 1;
+        pageData.maxScore = Math.max(pageData.maxScore, boostedScore);
+
+        // Track term details
+        if (!pageData.termDetails.has(termName)) {
+          pageData.termDetails.set(termName, {
+            frequency: 0,
+            score: 0,
+            fields: [],
+          });
+        }
+
+        const termDetail = pageData.termDetails.get(termName);
+        termDetail.frequency += parseInt(term_frequency);
+        termDetail.score += boostedScore;
+        termDetail.fields.push(field);
+
+        // Track matched terms per page
+        if (!pageTermMatches.has(pageId)) {
+          pageTermMatches.set(pageId, new Set());
+        }
+        pageTermMatches.get(pageId).add(termName);
+      }
+      
+      processedChunks++;
+      if (processedChunks < chunks.length) {
+        // Use setTimeout to yield control and prevent blocking
+        setTimeout(() => processChunk(chunks[processedChunks]), 0);
+      } else {
+        resolve({ pageScores, pageTermMatches });
+      }
+    };
+
+    if (chunks.length > 0) {
+      processChunk(chunks[0]);
+    } else {
+      resolve({ pageScores, pageTermMatches });
+    }
+  });
+}
+
 async function searchUseQuery(searchQuery, options = {}) {
   const {
     limit = 10,
@@ -69,12 +149,12 @@ async function searchUseQuery(searchQuery, options = {}) {
       };
     }
 
-    // Find matching terms
-    let termQuery;
-    let termParams;
-
+    // PARALLEL PHASE 1: Execute database queries in parallel
+    const dbStartTime = Date.now();
+    
+    // Prepare queries
+    let termQuery, termParams;
     if (fuzzyMatch) {
-      // Use ILIKE for fuzzy matching
       const fuzzyConditions = queryTerms.map(
         (_, index) => `term ILIKE $${index + 1}`
       );
@@ -83,12 +163,17 @@ async function searchUseQuery(searchQuery, options = {}) {
       )}`;
       termParams = queryTerms.map((term) => `%${term}%`);
     } else {
-      // Exact matching using ANY
       termQuery = "SELECT id, term FROM terms WHERE term = ANY($1)";
       termParams = [queryTerms];
     }
 
-    const matchingTermsResult = await query(termQuery, termParams);
+    const fieldFilter = fields.length > 0 ? fields : ["content"];
+
+    // Execute both queries in parallel
+    const [matchingTermsResult] = await Promise.all([
+      query(termQuery, termParams)
+    ]);
+
     const matchingTerms = matchingTermsResult.rows;
 
     if (!matchingTerms || matchingTerms.length === 0) {
@@ -107,10 +192,8 @@ async function searchUseQuery(searchQuery, options = {}) {
 
     console.log(`Found ${matchingTerms.length} matching terms`);
 
-    // Get term-page index data
+    // PARALLEL PHASE 2: Get term-page data
     const termIds = matchingTerms.map((t) => t.id);
-    const fieldFilter = fields.length > 0 ? fields : ["content"];
-
     const termPageResult = await query(
       `
       SELECT term_id, page_id, term_frequency, tf_idf, field 
@@ -121,6 +204,7 @@ async function searchUseQuery(searchQuery, options = {}) {
     );
 
     const termPageData = termPageResult.rows;
+    console.log(`DB queries completed in ${Date.now() - dbStartTime}ms`);
 
     if (!termPageData || termPageData.length === 0) {
       console.log("No indexed pages found for terms");
@@ -136,92 +220,68 @@ async function searchUseQuery(searchQuery, options = {}) {
       };
     }
 
-    // Calculate page scores
-    const pageScores = new Map();
-    const pageTermMatches = new Map();
-    const termLookup = new Map(matchingTerms.map((t) => [t.id, t.term]));
+    // PARALLEL PHASE 3: Process page scores in chunks (non-blocking)
+    const scoreStartTime = Date.now();
+    const { pageScores, pageTermMatches } = await processPageScoresInChunks(
+      termPageData, 
+      matchingTerms, 
+      boost,
+      5000 // Process 5000 records per chunk
+    );
+    console.log(`Score processing completed in ${Date.now() - scoreStartTime}ms`);
 
-    for (const entry of termPageData) {
-      const { page_id, term_id, tf_idf, field, term_frequency } = entry;
-      const pageId = parseInt(page_id);
-      const termName = termLookup.get(parseInt(term_id));
-
-      // Apply field boosting
-      const fieldBoost = boost[field] || 1.0;
-      const boostedScore = parseFloat(tf_idf) * fieldBoost;
-
-      // Initialize page data if needed
-      if (!pageScores.has(pageId)) {
-        pageScores.set(pageId, {
-          totalScore: 0,
-          termCount: 0,
-          termDetails: new Map(),
-          maxScore: 0,
-        });
-      }
-
-      const pageData = pageScores.get(pageId);
-      pageData.totalScore += boostedScore;
-      pageData.termCount += 1;
-      pageData.maxScore = Math.max(pageData.maxScore, boostedScore);
-
-      // Track term details
-      if (!pageData.termDetails.has(termName)) {
-        pageData.termDetails.set(termName, {
-          frequency: 0,
-          score: 0,
-          fields: [],
-        });
-      }
-
-      const termDetail = pageData.termDetails.get(termName);
-      termDetail.frequency += parseInt(term_frequency);
-      termDetail.score += boostedScore;
-      termDetail.fields.push(field);
-
-      // Track matched terms per page
-      if (!pageTermMatches.has(pageId)) {
-        pageTermMatches.set(pageId, new Set());
-      }
-      pageTermMatches.get(pageId).add(termName);
-    }
-
-    // Score and rank pages
+    // PARALLEL PHASE 4: Score and rank pages with batch processing
+    const rankingStartTime = Date.now();
     const scoredPages = [];
 
-    for (const [pageId, scoreData] of pageScores) {
-      const matchedTerms = pageTermMatches.get(pageId);
-      const termCoverage = matchedTerms.size / queryTerms.length;
+    // Process pages in batches to avoid blocking
+    const pageEntries = Array.from(pageScores.entries());
+    const batchSize = 1000;
+    
+    for (let i = 0; i < pageEntries.length; i += batchSize) {
+      const batch = pageEntries.slice(i, i + batchSize);
+      
+      for (const [pageId, scoreData] of batch) {
+        const matchedTerms = pageTermMatches.get(pageId);
+        const termCoverage = matchedTerms.size / queryTerms.length;
 
-      // Calculate final score with coverage bonus
-      const avgScore = scoreData.totalScore / scoreData.termCount;
-      const coverageBonus = termCoverage * 0.5;
-      const finalScore = avgScore + coverageBonus;
+        // Calculate final score with coverage bonus
+        const avgScore = scoreData.totalScore / scoreData.termCount;
+        const coverageBonus = termCoverage * 0.5;
+        const finalScore = avgScore + coverageBonus;
 
-      if (finalScore >= minScore) {
-        scoredPages.push({
-          pageId,
-          score: finalScore,
-          rawScore: scoreData.totalScore,
-          avgScore,
-          maxScore: scoreData.maxScore,
-          termCount: scoreData.termCount,
-          termCoverage,
-          matchedTerms: Array.from(matchedTerms),
-          termDetails: Object.fromEntries(
-            Array.from(scoreData.termDetails.entries()).map(
-              ([term, details]) => [
-                term,
-                {
-                  ...details,
-                  fields: [...new Set(details.fields)],
-                },
-              ]
-            )
-          ),
-        });
+        if (finalScore >= minScore) {
+          scoredPages.push({
+            pageId,
+            score: finalScore,
+            rawScore: scoreData.totalScore,
+            avgScore,
+            maxScore: scoreData.maxScore,
+            termCount: scoreData.termCount,
+            termCoverage,
+            matchedTerms: Array.from(matchedTerms),
+            termDetails: Object.fromEntries(
+              Array.from(scoreData.termDetails.entries()).map(
+                ([term, details]) => [
+                  term,
+                  {
+                    ...details,
+                    fields: [...new Set(details.fields)],
+                  },
+                ]
+              )
+            ),
+          });
+        }
+      }
+      
+      // Yield control every batch to prevent blocking
+      if (i + batchSize < pageEntries.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
+
+    console.log(`Ranking completed in ${Date.now() - rankingStartTime}ms`);
 
     // Sort by score and limit results
     scoredPages.sort((a, b) => b.score - a.score);
@@ -241,55 +301,83 @@ async function searchUseQuery(searchQuery, options = {}) {
       };
     }
 
-    // Get page details
+    // PARALLEL PHASE 5: Get page details and generate snippets in parallel
     const pageIds = topPages.map((p) => p.pageId);
     const selectFields = includeSnippets
       ? "id, url, title, meta_description, main_content as content"
       : "id, url, title, meta_description";
 
-    const pageDetailsResult = await query(
-      `
-      SELECT ${selectFields} FROM pages WHERE id = ANY($1)
-    `,
+    const pageDetailsPromise = query(
+      `SELECT ${selectFields} FROM pages WHERE id = ANY($1)`,
       [pageIds]
     );
 
+    // Prepare snippet generation tasks
+    const snippetTasks = includeSnippets ? 
+      topPages.map(scoredPage => ({
+        scoredPage,
+        generateSnippetAsync: async (content) => {
+          if (!content) return "";
+          return generateSnippet(content, scoredPage.matchedTerms);
+        }
+      })) : [];
+
+    // Execute page details query
+    const pageDetailsResult = await pageDetailsPromise;
     const pageDetails = pageDetailsResult.rows;
 
-    // Build final results
+    // Build final results with parallel snippet generation
     const pageDetailsMap = new Map(pageDetails.map((p) => [p.id, p]));
     const searchResults = [];
 
-    for (const scoredPage of topPages) {
-      const pageDetail = pageDetailsMap.get(scoredPage.pageId);
-      if (!pageDetail) continue;
+    // Process results in parallel batches
+    const resultBatches = [];
+    const resultBatchSize = 5;
+    
+    for (let i = 0; i < topPages.length; i += resultBatchSize) {
+      const batch = topPages.slice(i, i + resultBatchSize);
+      const batchPromise = Promise.all(
+        batch.map(async (scoredPage) => {
+          const pageDetail = pageDetailsMap.get(scoredPage.pageId);
+          if (!pageDetail) return null;
 
-      const result = {
-        id: pageDetail.id,
-        title: pageDetail.title || "Untitled",
-        description: pageDetail.meta_description || "",
-        url: pageDetail.url || "",
-        score: Math.round(scoredPage.score * 10000) / 10000,
-        matchedTerms: scoredPage.matchedTerms,
-        termCoverage: Math.round(scoredPage.termCoverage * 100),
-        debugging: {
-          rawScore: scoredPage.rawScore,
-          avgScore: scoredPage.avgScore,
-          maxScore: scoredPage.maxScore,
-          termCount: scoredPage.termCount,
-          termDetails: scoredPage.termDetails,
-        },
-      };
+          const result = {
+            id: pageDetail.id,
+            title: pageDetail.title || "Untitled",
+            description: pageDetail.meta_description || "",
+            url: pageDetail.url || "",
+            score: Math.round(scoredPage.score * 10000) / 10000,
+            matchedTerms: scoredPage.matchedTerms,
+            termCoverage: Math.round(scoredPage.termCoverage * 100),
+            debugging: {
+              rawScore: scoredPage.rawScore,
+              avgScore: scoredPage.avgScore,
+              maxScore: scoredPage.maxScore,
+              termCount: scoredPage.termCount,
+              termDetails: scoredPage.termDetails,
+            },
+          };
 
-      // Add snippet if requested
-      if (includeSnippets && pageDetail.content) {
-        result.snippet = generateSnippet(
-          pageDetail.content,
-          scoredPage.matchedTerms
-        );
-      }
+          // Generate snippet if requested
+          if (includeSnippets && pageDetail.content) {
+            result.snippet = await generateSnippetAsync(
+              pageDetail.content,
+              scoredPage.matchedTerms
+            );
+          }
 
-      searchResults.push(result);
+          return result;
+        })
+      );
+      resultBatches.push(batchPromise);
+    }
+
+    // Wait for all batches to complete
+    const batchResults = await Promise.all(resultBatches);
+    
+    // Flatten results and filter nulls
+    for (const batch of batchResults) {
+      searchResults.push(...batch.filter(result => result !== null));
     }
 
     const searchTime = Date.now() - startTime;
@@ -318,6 +406,17 @@ async function searchUseQuery(searchQuery, options = {}) {
     console.error("Search error:", error);
     throw new Error(`Search failed: ${error.message}`);
   }
+}
+
+/**
+ * Async snippet generation to avoid blocking
+ */
+async function generateSnippetAsync(content, matchedTerms, maxLength = 200) {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(generateSnippet(content, matchedTerms, maxLength));
+    }, 0);
+  });
 }
 
 /**
@@ -362,11 +461,9 @@ function generateSnippet(content, matchedTerms, maxLength = 200) {
   if (start > 0) snippet = "..." + snippet;
   if (end < content.length) snippet = snippet + "...";
 
-  // Highlight matched terms
-  for (const term of lowerTerms) {
-    const regex = new RegExp(`(${term})`, "gi");
-    snippet = snippet.replace(regex, "**$1**");
-  }
+  // Highlight matched terms (optimized with single pass)
+  const termRegex = new RegExp(`(${lowerTerms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, "gi");
+  snippet = snippet.replace(termRegex, "**$1**");
 
   return snippet;
 }

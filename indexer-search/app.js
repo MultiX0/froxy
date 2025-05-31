@@ -68,6 +68,8 @@ app.get('/health', async (req, res) => {
   }
 });
 
+app.use(apiKeyChecker);
+
 app.get("/indexing-tracked", async (req, res) => {
   try {
     if (indexingStatus.isRunning) {
@@ -116,6 +118,16 @@ app.get("/indexing-tracked", async (req, res) => {
   }
 });
 
+app.get("/results-count", async (req, res) => {
+  const pg = require('./lib/services/db_service');
+  const resultCountQuery = 'SELECT COUNT(*) FROM pages;';
+  const data = await pg.query(resultCountQuery);
+  const count = data.rows[0].count;
+  return res.json({count})
+  
+});
+
+
 app.get("/indexing-status", (req, res) => {
   res.json({
     status: indexingStatus,
@@ -126,7 +138,6 @@ app.get("/indexing-status", (req, res) => {
 });
 
 
-app.use(apiKeyChecker);
 
 app.get('/search', async(req,res) => searchAPI(req,res));
 
