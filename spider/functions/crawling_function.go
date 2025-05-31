@@ -643,7 +643,7 @@ func (c *Crawler) shouldSkipURL(url string) bool {
 		".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
 		".zip", ".rar", ".tar", ".gz", ".7z",
 		".mp3", ".mp4", ".wav", ".avi", ".mov", ".wmv",
-		".css", ".js", ".ico", ".xml", ".json",
+		".css", ".js", ".ico", ".xml", ".json", ".php",
 	}
 
 	lowerURL := strings.ToLower(url)

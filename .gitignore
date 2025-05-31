@@ -1,9 +1,9 @@
-spider/.env
 indexer-search/node_modules
-front-end/node_modules
 indexer-search/.env
-spider/crawler.log
 
+spider/.env
+spider/crawler.log
+spider/main_backup.go
 
 # frontend
 front-end/node_modules
@@ -11,9 +11,12 @@ front-end/node_modules
 # next.js
 front-end/.next/
 front-end/out/
+front-end/.env
+
 
 # production
 front-end/build
+front-end/.env
 
 # debug
 front-end/npm-debug.log*
