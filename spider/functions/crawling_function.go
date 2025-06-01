@@ -84,6 +84,7 @@ func NewCrawler() *Crawler {
 }
 func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 	// Validate crawler state
+
 	if c == nil {
 		log.Fatal("Crawler instance is nil")
 		return
