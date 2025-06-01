@@ -218,16 +218,13 @@ start_crawling() {
 package main
 
 import (
-    "context"
-    "fmt"
-    "log"
-    "sync"
-    "time"
+	"fmt"
+	"log"
+	"time"
 
-    "github.com/froxy/db"
-    "github.com/froxy/functions"
-    "github.com/froxy/models"
-    "github.com/joho/godotenv"
+	"github.com/froxy/db"
+	"github.com/froxy/functions"
+	"github.com/joho/godotenv"
 )
 
 func main() {
