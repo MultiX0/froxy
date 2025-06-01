@@ -8,7 +8,6 @@ import Link from "next/link"
 
 // TODO in the future make suggestions from the backend using levenshtein distance
 
-
 const searchSuggestions = [
   "JavaScript frameworks",
   "React best practices",
@@ -58,6 +57,8 @@ const formatNumber = (num: number): string => {
   return num.toString()
 }
 
+type HealthStatus = "connecting" | "online" | "offline"
+
 export default function FroxySearch() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isFocused, setIsFocused] = useState(false)
@@ -70,6 +71,7 @@ export default function FroxySearch() {
   const [resultsCount, setResultsCount] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [isLoadingCount, setIsLoadingCount] = useState(true)
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>("connecting")
 
   // Initialize with random placeholder
   useEffect(() => {
@@ -130,6 +132,42 @@ export default function FroxySearch() {
     }
   }, [])
 
+  // Health check function
+  const checkHealth = async () => {
+    try {
+      setHealthStatus("connecting")
+      const response = await fetch("/api/health", {
+        method: "GET",
+        cache: "no-cache",
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.status === "healthy") {
+          setHealthStatus("online")
+        } else {
+          setHealthStatus("offline")
+        }
+      } else {
+        setHealthStatus("offline")
+      }
+    } catch (error) {
+      console.error("Health check failed:", error)
+      setHealthStatus("offline")
+    }
+  }
+
+  // Health check effect - check on mount and every 30 seconds
+  useEffect(() => {
+    checkHealth()
+
+    const healthInterval = setInterval(() => {
+      checkHealth()
+    }, 30000) // Check every 30 seconds
+
+    return () => clearInterval(healthInterval)
+  }, [])
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     const query = selectedSuggestion >= 0 ? suggestions[selectedSuggestion] : searchQuery
@@ -182,6 +220,50 @@ export default function FroxySearch() {
 
     fetchResultsCount()
   }, [])
+
+  // Get status display properties
+  const getStatusDisplay = () => {
+    switch (healthStatus) {
+      case "connecting":
+        return {
+          text: "CONNECTING",
+          textColor: "text-orange-400/70",
+          bgColor: "bg-orange-500/10",
+          borderColor: "border-orange-500/20",
+          dotColor: "bg-orange-400",
+          animate: true,
+        }
+      case "online":
+        return {
+          text: "ONLINE",
+          textColor: "text-blue-400/70",
+          bgColor: "bg-blue-500/10",
+          borderColor: "border-blue-500/20",
+          dotColor: "bg-green-400",
+          animate: true,
+        }
+      case "offline":
+        return {
+          text: "OFFLINE",
+          textColor: "text-red-400/70",
+          bgColor: "bg-red-500/10",
+          borderColor: "border-red-500/20",
+          dotColor: "bg-red-400",
+          animate: false,
+        }
+      default:
+        return {
+          text: "UNKNOWN",
+          textColor: "text-gray-400/70",
+          bgColor: "bg-gray-500/10",
+          borderColor: "border-gray-500/20",
+          dotColor: "bg-gray-400",
+          animate: false,
+        }
+    }
+  }
+
+  const statusDisplay = getStatusDisplay()
 
   return (
     <div className="min-h-screen bg-black dark:bg-black relative overflow-hidden flex flex-col items-center justify-center px-4 transition-colors duration-500">
@@ -308,10 +390,28 @@ export default function FroxySearch() {
               <Github className="w-4 h-4 mr-2" />
               SOURCE_CODE
             </a>
-            <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-blue-400/70 bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 rounded-full font-mono">
-              <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
-              ONLINE
-            </div>
+
+            {/* Status display with proper conditional classes */}
+            {healthStatus === "connecting" && (
+              <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-orange-400/70 bg-orange-500/10 backdrop-blur-sm border border-orange-500/20 rounded-full font-mono">
+                <div className="w-2 h-2 bg-orange-400 rounded-full mr-2 animate-pulse"></div>
+                CONNECTING
+              </div>
+            )}
+
+            {healthStatus === "online" && (
+              <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-blue-400/70 bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 rounded-full font-mono">
+                <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+                ONLINE
+              </div>
+            )}
+
+            {healthStatus === "offline" && (
+              <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-red-400/70 bg-red-500/10 backdrop-blur-sm border border-red-500/20 rounded-full font-mono">
+                <div className="w-2 h-2 bg-red-400 rounded-full mr-2"></div>
+                OFFLINE
+              </div>
+            )}
           </div>
 
           {/* Second row: Results counter */}
