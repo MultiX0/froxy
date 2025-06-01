@@ -4,6 +4,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const query = searchParams.get("q")
+    const fuzzy = searchParams.get("fuzzy")
 
     if (!query) {
       return NextResponse.json({ error: "Query parameter is required" }, { status: 400 })
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "API configuration error" }, { status: 500 })
     }
 
-    const response = await fetch(`${apiUrl}/search?q=${encodeURIComponent(query)}`, {
+    const response = await fetch(`${apiUrl}/search?q=${encodeURIComponent(query)}&fuzzy=${fuzzy}`, {
       headers: {
         "x-api-key": apiKey,
       },

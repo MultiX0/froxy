@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { Search, Github, ArrowRight, Zap } from "lucide-react"
+import { Search, Github, ArrowRight, Zap, Sparkles } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 
@@ -72,6 +72,7 @@ export default function FroxySearch() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const [isLoadingCount, setIsLoadingCount] = useState(true)
   const [healthStatus, setHealthStatus] = useState<HealthStatus>("connecting")
+  const [fuzzySearch, setFuzzySearch] = useState(false)
 
   // Initialize with random placeholder
   useEffect(() => {
@@ -172,7 +173,7 @@ export default function FroxySearch() {
     e.preventDefault()
     const query = selectedSuggestion >= 0 ? suggestions[selectedSuggestion] : searchQuery
     if (query.trim()) {
-      router.push(`/search?q=${encodeURIComponent(query.trim())}`)
+      router.push(`/search?q=${encodeURIComponent(query.trim())}&fuzzy=${fuzzySearch}`)
     }
   }
 
@@ -186,7 +187,7 @@ export default function FroxySearch() {
     } else if (e.key === "Enter" && selectedSuggestion >= 0) {
       e.preventDefault()
       setSearchQuery(suggestions[selectedSuggestion])
-      router.push(`/search?q=${encodeURIComponent(suggestions[selectedSuggestion].trim())}`)
+      router.push(`/search?q=${encodeURIComponent(suggestions[selectedSuggestion].trim())}&fuzzy=${fuzzySearch}`)
     }
   }
 
@@ -194,7 +195,7 @@ export default function FroxySearch() {
     setSearchQuery(suggestion)
     setSuggestions([])
     setIsFocused(false)
-    router.push(`/search?q=${encodeURIComponent(suggestion.trim())}`)
+    router.push(`/search?q=${encodeURIComponent(suggestion.trim())}&fuzzy=${fuzzySearch}`)
   }
 
   // Fetch results count from our backend API
@@ -221,49 +222,10 @@ export default function FroxySearch() {
     fetchResultsCount()
   }, [])
 
-  // Get status display properties
-  const getStatusDisplay = () => {
-    switch (healthStatus) {
-      case "connecting":
-        return {
-          text: "CONNECTING",
-          textColor: "text-orange-400/70",
-          bgColor: "bg-orange-500/10",
-          borderColor: "border-orange-500/20",
-          dotColor: "bg-orange-400",
-          animate: true,
-        }
-      case "online":
-        return {
-          text: "ONLINE",
-          textColor: "text-blue-400/70",
-          bgColor: "bg-blue-500/10",
-          borderColor: "border-blue-500/20",
-          dotColor: "bg-green-400",
-          animate: true,
-        }
-      case "offline":
-        return {
-          text: "OFFLINE",
-          textColor: "text-red-400/70",
-          bgColor: "bg-red-500/10",
-          borderColor: "border-red-500/20",
-          dotColor: "bg-red-400",
-          animate: false,
-        }
-      default:
-        return {
-          text: "UNKNOWN",
-          textColor: "text-gray-400/70",
-          bgColor: "bg-gray-500/10",
-          borderColor: "border-gray-500/20",
-          dotColor: "bg-gray-400",
-          animate: false,
-        }
-    }
+  // Toggle fuzzy search
+  const toggleFuzzySearch = () => {
+    setFuzzySearch((prev) => !prev)
   }
-
-  const statusDisplay = getStatusDisplay()
 
   return (
     <div className="min-h-screen bg-black dark:bg-black relative overflow-hidden flex flex-col items-center justify-center px-4 transition-colors duration-500">
@@ -338,6 +300,22 @@ export default function FroxySearch() {
                     appearance: "none",
                   }}
                 />
+
+                {/* Fuzzy Search Toggle */}
+                <div
+                  className={`absolute right-14 sm:right-16 flex items-center cursor-pointer`}
+                  onClick={toggleFuzzySearch}
+                >
+                  <div
+                    className={`w-8 h-4 rounded-full transition-colors duration-300 flex items-center ${fuzzySearch ? "bg-blue-500" : "bg-gray-700"}`}
+                  >
+                    <div
+                      className={`w-3 h-3 rounded-full bg-white transform transition-transform duration-300 ${fuzzySearch ? "translate-x-4" : "translate-x-1"}`}
+                    ></div>
+                  </div>
+                  <Sparkles className={`ml-1.5 w-3.5 h-3.5 ${fuzzySearch ? "text-blue-400" : "text-gray-500"}`} />
+                </div>
+
                 <button
                   type="submit"
                   className={`absolute right-2 sm:right-3 p-2 sm:p-2.5 rounded-full transition-all duration-300 outline-none focus:outline-none focus:ring-0 ${
@@ -410,6 +388,14 @@ export default function FroxySearch() {
               <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-red-400/70 bg-red-500/10 backdrop-blur-sm border border-red-500/20 rounded-full font-mono">
                 <div className="w-2 h-2 bg-red-400 rounded-full mr-2"></div>
                 OFFLINE
+              </div>
+            )}
+
+            {/* Fuzzy Search Status */}
+            {fuzzySearch && (
+              <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-purple-400/70 bg-purple-500/10 backdrop-blur-sm border border-purple-500/20 rounded-full font-mono">
+                <Sparkles className="w-3.5 h-3.5 mr-2 text-purple-400" />
+                FUZZY SEARCH
               </div>
             )}
           </div>
