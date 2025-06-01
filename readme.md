@@ -23,6 +23,10 @@ This project is built for learning, experimenting, and extending — great for d
 >
 > *(We’ll keep evolving this codebase together ❤️)*
 
+
+> Note: I prefer simplicity over unnecessary complexity. We might make the architecture more advanced in the future, but for now, it's simple, clean, and straightforward—no fancy stuff, no over-engineering. It's just a chill project for now. If needed, we can scale and make it more complex later. After all, it started as a fun project—nothing more. <3
+
+
 ---
 
 ## 🔍 Features
@@ -154,6 +158,7 @@ DB_SSLMODE=disable # or prefer, require, etc.
 ```
 
 > 💡 You can use `DB_SSLMODE=disable` if you don’t want to use SSL.
+> OR You can simply run ./froxy.sh and chose the option (4) and it will automatically setup for you
 
 ---
 
