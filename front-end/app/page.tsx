@@ -246,7 +246,7 @@ export default function FroxySearch() {
             Ask Real Questions
           </h2>
           <h1 className="text-4xl sm:text-6xl md:text-7xl font-bold text-white dark:text-white tracking-tight transition-colors duration-500">
-          <span className="text-5xl bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 dark:from-blue-400 dark:via-blue-500 dark:to-cyan-400 bg-clip-text text-transparent drop-shadow-2xl">
+          <span className="text-4xl sm:text-6xl md:text-7xl bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 dark:from-blue-400 dark:via-blue-500 dark:to-cyan-400 bg-clip-text text-transparent drop-shadow-2xl">
           FROXY
         </span>
           </h1>
