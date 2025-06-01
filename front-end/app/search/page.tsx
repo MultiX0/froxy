@@ -469,14 +469,6 @@ export default function SearchResults() {
                             <Users className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
                             <span>Coverage: {result.termCoverage}%</span>
                           </div>
-                          {Object.entries(result.debugging.termDetails).map(([term, details]) => (
-                            <div key={term} className="flex items-center">
-                              <Clock className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-                              <span>
-                                {term}: {details.frequency} matches
-                              </span>
-                            </div>
-                          ))}
                         </div>
                       </div>
                     </div>
