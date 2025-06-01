@@ -2,7 +2,7 @@
 
 > A chill, open-source web engine that crawls, indexes, and vibes with web content.
 
-![froxy banner](https://aoxixugclqbvbuzttexn.supabase.co/storage/v1/object/public/dummy//Screenshot%20from%202025-05-30%2003-55-57.png)
+![froxy banner](https://github.com/MultiX0/froxy/blob/main/banner.png?raw=true)
 
 
 ---
