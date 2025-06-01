@@ -14,16 +14,16 @@ export default function PrivacyPage() {
 
       {/* Header */}
       <header className="relative z-10 border-b border-gray-800/50 bg-black/20 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
           <Link
             href="/"
-            className="flex items-center text-gray-300 hover:text-white transition-colors duration-200 font-mono"
+            className="flex items-center text-gray-300 hover:text-white transition-colors duration-200 font-mono text-sm sm:text-base"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             BACK_TO_SEARCH
           </Link>
 
-          <Link href="/" className="text-2xl font-bold text-blue-400 font-mono">
+          <Link href="/" className="text-xl sm:text-2xl font-bold text-blue-400 font-mono">
             FROXY
           </Link>
 
@@ -49,9 +49,9 @@ export default function PrivacyPage() {
             </span>
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto leading-relaxed font-mono">
-            Your privacy is important to us. This policy explains how we collect, use, and protect your information.
+            Your privacy is important to us. This policy explains how we handle your information.
           </p>
-          <p className="text-sm text-gray-400 mt-4 font-mono">Last updated: December 2024</p>
+          <p className="text-sm text-gray-400 mt-4 font-mono">Last updated: June 2025</p>
         </div>
 
         {/* Privacy Principles */}
@@ -67,19 +67,19 @@ export default function PrivacyPage() {
           <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-6 text-center hover:border-gray-700/40 transition-all duration-300">
             <Eye className="w-8 h-8 text-blue-400 mx-auto mb-4" />
             <h3 className="text-lg font-bold text-white mb-2 font-mono">TRANSPARENCY</h3>
-            <p className="text-gray-400 text-sm font-mono">Clear information about what data we collect and why</p>
+            <p className="text-gray-400 text-sm font-mono">Clear information about our data practices</p>
           </div>
 
           <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-6 text-center hover:border-gray-700/40 transition-all duration-300">
             <Lock className="w-8 h-8 text-purple-400 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-white mb-2 font-mono">MINIMAL_DATA</h3>
-            <p className="text-gray-400 text-sm font-mono">We only collect data necessary for service functionality</p>
+            <h3 className="text-lg font-bold text-white mb-2 font-mono">NO_PERSONAL_DATA</h3>
+            <p className="text-gray-400 text-sm font-mono">We don't collect personal data at this time</p>
           </div>
 
           <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-6 text-center hover:border-gray-700/40 transition-all duration-300">
             <Database className="w-8 h-8 text-cyan-400 mx-auto mb-4" />
             <h3 className="text-lg font-bold text-white mb-2 font-mono">NO_TRACKING</h3>
-            <p className="text-gray-400 text-sm font-mono">We don't track users across websites or sell data (Because we dont know how)</p>
+            <p className="text-gray-400 text-sm font-mono">We don't track users across websites or sell data (Because we don't know how)</p>
           </div>
         </div>
 
@@ -89,24 +89,21 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-bold text-white mb-6 font-mono">INFORMATION_WE_COLLECT</h2>
             <div className="space-y-4 text-gray-300 font-mono text-sm">
               <div>
-                <h4 className="text-white font-bold mb-2">Search Queries</h4>
+                <h4 className="text-white font-bold mb-2">No Personal Data</h4>
                 <p>
-                  We temporarily store search queries to provide results and improve our search algorithms. Queries are
-                  not linked to personal identifiers.
+                  Currently, we do not collect any personal data from our users. If this changes in the future, we will update this policy to reflect the new practices.
                 </p>
               </div>
               <div>
                 <h4 className="text-white font-bold mb-2">Usage Analytics</h4>
                 <p>
-                  We collect anonymous usage statistics to understand how our service is used and to improve
-                  performance.
+                  We collect anonymous usage statistics to understand how our service is used and to improve performance.
                 </p>
               </div>
               <div>
                 <h4 className="text-white font-bold mb-2">Technical Information</h4>
                 <p>
-                  Basic technical information like IP addresses and browser types for security and optimization
-                  purposes.
+                  Basic technical information like IP addresses and browser types for security and optimization purposes.
                 </p>
               </div>
             </div>
@@ -135,7 +132,6 @@ export default function PrivacyPage() {
             <div className="space-y-4 text-gray-300 font-mono text-sm">
               <p>We retain data only as long as necessary to provide our services:</p>
               <ul className="list-disc list-inside space-y-2 ml-4">
-                <li>Search queries: Anonymized after 30 days</li>
                 <li>Usage analytics: Aggregated data retained for service improvement</li>
                 <li>Technical logs: Automatically deleted after 90 days</li>
               </ul>
@@ -189,7 +185,7 @@ export default function PrivacyPage() {
       <footer className="relative z-10 border-t border-gray-800/50 py-8 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <div className="text-gray-400 text-sm font-mono">© 2024 FROXY. Built with ❤️ for developers.</div>
+            <div className="text-gray-400 text-sm font-mono">© {new Date().getFullYear()} FROXY. Built with ❤️ for developers.</div>
             <div className="flex space-x-6 text-xs text-gray-500 font-mono">
               <Link href="/about" className="hover:text-blue-400 transition-colors duration-200">
                 ABOUT

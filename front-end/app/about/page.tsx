@@ -55,16 +55,16 @@ export default function AboutPage() {
 
       {/* Header */}
       <header className="relative z-10 border-b border-gray-800/50 bg-black/20 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
           <Link
             href="/"
-            className="flex items-center text-gray-300 hover:text-white transition-colors duration-200 font-mono"
+            className="flex items-center text-gray-300 hover:text-white transition-colors duration-200 font-mono text-sm sm:text-base"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             BACK_TO_SEARCH
           </Link>
 
-          <Link href="/" className="text-2xl font-bold text-blue-400 font-mono">
+          <Link href="/" className="text-xl sm:text-2xl font-bold text-blue-400 font-mono">
             FROXY
           </Link>
 
@@ -127,28 +127,25 @@ export default function AboutPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
           <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 hover:border-gray-700/40 transition-all duration-300">
             <Search className="w-10 h-10 text-blue-400 mb-6" />
-            <h3 className="text-xl font-bold text-white mb-4 font-mono">INTELLIGENT_SEARCH</h3>
+            <h3 className="text-xl font-bold text-white mb-4 font-mono">BASIC_SEARCH</h3>
             <p className="text-gray-300 leading-relaxed font-mono text-sm">
-              Advanced search algorithms that understand context and provide relevant results for developers,
-              documentation, tutorials, and code examples.
+              Basic searching algorithm that Google used to use in the back days (and you can add more stuff)
             </p>
           </div>
 
           <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 hover:border-gray-700/40 transition-all duration-300">
             <Zap className="w-10 h-10 text-cyan-400 mb-6" />
-            <h3 className="text-xl font-bold text-white mb-4 font-mono">LIGHTNING_FAST</h3>
+            <h3 className="text-xl font-bold text-white mb-4 font-mono">MODERATE_SPEED</h3>
             <p className="text-gray-300 leading-relaxed font-mono text-sm">
-              Optimized search infrastructure delivering results in milliseconds. No waiting, just instant access to the
-              information you need.
+              Not that fast, I used Node.js in the backend and in the future I will switch it to Golang for faster results
             </p>
           </div>
 
           <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 hover:border-gray-700/40 transition-all duration-300">
             <Database className="w-10 h-10 text-green-400 mb-6" />
-            <h3 className="text-xl font-bold text-white mb-4 font-mono">COMPREHENSIVE_INDEX</h3>
+            <h3 className="text-xl font-bold text-white mb-4 font-mono">WEB_RESOURCES</h3>
             <p className="text-gray-300 leading-relaxed font-mono text-sm">
-              Continuously growing database of developer resources, documentation, tutorials, and community content from
-              across the web.
+              Resources from all the web (we don't collect specific results)
             </p>
           </div>
 
@@ -166,9 +163,7 @@ export default function AboutPage() {
         <div className="bg-gray-900/20 backdrop-blur-sm border border-gray-800/30 rounded-xl p-8 mb-16">
           <h2 className="text-2xl font-bold text-white mb-6 text-center font-mono">OUR_MISSION</h2>
           <p className="text-gray-300 leading-relaxed text-center max-w-3xl mx-auto font-mono">
-            To democratize access to developer knowledge by providing a fast, intelligent, and comprehensive search
-            experience. We believe that finding the right information shouldn't be a barrier to building amazing
-            software. FROXY is here to bridge that gap.
+            Create something fun and large scale in the future with your help since it is an open source project. I made it in 3 days just for fun and learning how search engines work
           </p>
         </div>
 
@@ -200,7 +195,7 @@ export default function AboutPage() {
       <footer className="relative z-10 border-t border-gray-800/50 py-8 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <div className="text-gray-400 text-sm font-mono">© 2024 FROXY. Built with ❤️ for developers.</div>
+            <div className="text-gray-400 text-sm font-mono">© {new Date().getFullYear()} FROXY. Built with ❤️ for developers.</div>
             <div className="flex space-x-6 text-xs text-gray-500 font-mono">
               <Link href="/privacy" className="hover:text-blue-400 transition-colors duration-200">
                 PRIVACY
