@@ -45,3 +45,4 @@ db/.env
 # remove server key and the certification
 db/certs/server.crt
 db/certs/server.key
+/front-end/README.md
