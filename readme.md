@@ -1,8 +1,9 @@
-# 🕷️ Froxy
+# **# 🕷️ Froxy**
 
 > A chill, open-source web engine that crawls, indexes, and vibes with web content.
 
 ![froxy banner](https://aoxixugclqbvbuzttexn.supabase.co/storage/v1/object/public/dummy//Screenshot%20from%202025-05-30%2003-55-57.png)
+
 
 ---
 
@@ -10,7 +11,7 @@
 
 Froxy is a modular full-stack web engine designed to crawl web pages, extract content, index it using TF-IDF, and make it searchable — all powered by modern tools. It includes:
 
-* A **Go**-based crawler
+* A **Go**-based crawler (aka the spider 🕷️)
 * A **Node.js** indexer & search engine
 * A **PostgreSQL** database
 * A **Next.js** front-end UI (fully integrated with real APIs)
@@ -27,15 +28,15 @@ This project is built for learning, experimenting, and extending — great for d
 ## 🔍 Features
 
 * 🌐 Crawl websites (Go)
-* 🧠 Index & search content (TF-IDF, Node.js)
-* 💃 Store in PostgreSQL
+* 🤔 Index & search content (TF-IDF, Node.js)
+* 🕺 Store in PostgreSQL
 * 🎨 Modern UI in Next.js + Tailwind
 
 > The frontend is fully connected to the backend and only uses mock data for suggestions.
 
 ---
 
-## 🗂️ Folder Structure
+## 📂 Folder Structure
 
 ```
 froxy/
@@ -82,19 +83,19 @@ froxy/
 cd db
 docker-compose up -d
 
-# 2. Start the indexer service
+# 2. Run the crawler first (this collects website content from the URLs you provide)
+cd ../spider
+go run main.go
+
+# 3. Once you've crawled enough, start the indexer
 cd ../indexer-search
 npm install
 npm start
 
-# 3. Run the crawler
-cd ../spider
-go run main.go
-
 # 4. Launch the front-end
 cd ../front-end
-pnpm install
-pnpm dev
+npm i --legacy-peer-deps
+npm run dev
 ```
 
 💡 **Pro tip**: If you don’t want to mess with each service manually, just run:
@@ -111,7 +112,7 @@ This script handles crawling and indexing in one go, so you can just focus on ex
 
 Each folder has its own `.env` file. Here's what you need to set up:
 
-### For `spider/`
+### For `indexer-search/`
 
 ```env
 DB_HOST=localhost
@@ -124,15 +125,10 @@ API_KEY=your_api_key
 PORT=8080
 ```
 
-### For `indexer-search/`
+### For `front-end/`
 
 ```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=your_user
-DB_PASSWORD=your_password
-DB_NAME=your_database
-DB_SSLMODE=disable
+API_URL=http://localhost:8080
 API_KEY=your_api_key
 ```
 
@@ -143,10 +139,10 @@ POSTGRES_DB=your_database
 POSTGRES_USER=your_user
 POSTGRES_PASSWORD=your_password
 DB_NAME=your_database
-DB_SSLMODE=disable
+DB_SSLMODE=require # or prefer, require, etc.
 ```
 
-### For `front-end/`
+### For `spider/`
 
 ```env
 DB_HOST=localhost
@@ -154,26 +150,36 @@ DB_PORT=5432
 DB_USER=your_user
 DB_PASSWORD=your_password
 DB_NAME=your_database
-DB_SSLMODE=disable
+DB_SSLMODE=disable # or prefer, require, etc.
 ```
 
 > 💡 You can use `DB_SSLMODE=disable` if you don’t want to use SSL.
 
 ---
 
-## 🧠 How it works
+## 🤔 How it works
 
-1. **Crawler** pulls website content and metadata
+1. **Crawler** pulls website content and metadata from your provided URLs
 2. **Indexer** parses and weights using TF-IDF
 3. **PostgreSQL** stores the indexed records
 4. **Frontend** serves the search UI + suggestions
 
+To customize crawling sources, edit this section in `spider/main.go`:
+
+```go
+var crawlableSites = []string{
+    "https://en.wikipedia.org/wiki/Main_Page",
+}
+```
+
+Or just run `./froxy.sh` to keep things simple.
+
 ---
 
-## 📚 Tech Stack
+## 📙 Tech Stack
 
-* 🐹 Go (Golang) – crawler
-* 🔨 Node.js – indexer, TF-IDF
+* 🕷️ Go (Golang) – crawler
+* 💪 Node.js – indexer, TF-IDF
 * 📀 PostgreSQL – database
 * ⚛️ Next.js – frontend
 * 🎨 TailwindCSS + shadcn/ui – UI components
@@ -184,7 +190,7 @@ DB_SSLMODE=disable
 ## 📬 Want to contribute?
 
 * Fork it 🌛
-* Open a PR 🛠️
+* Open a PR 🚰
 * Share your ideas 💡
 
 ---
