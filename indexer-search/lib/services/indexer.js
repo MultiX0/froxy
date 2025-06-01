@@ -141,7 +141,13 @@ async function getGlobalDocumentFrequencies(terms, totalPages) {
 async function processUpsertsInParallel(upsertTasks, concurrency = PARALLEL_UPSERTS) {
   let indexedCount = 0;
   const client = await getClient();
-  
+
+  // We need to implement reading replica in the future
+  // So that when we search on something but the same time the indexer is running
+  // We need to be isolated so there is no preformance issues
+
+  // await client.query('SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED');
+
   try {
     for (let i = 0; i < upsertTasks.length; i += concurrency) {
       const batch = upsertTasks.slice(i, i + concurrency);
