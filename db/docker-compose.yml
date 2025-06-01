@@ -6,7 +6,7 @@ services:
     user: postgres
     env_file:
       - .env
-    environment:
+    environment:  # You do not need to add the env in this way you can implemented as you want
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

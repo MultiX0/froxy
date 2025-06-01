@@ -4,6 +4,8 @@ const natural = require('natural');
 const pluralize = require('pluralize');
 
 
+// this cache is temp soultion , we may implement redis in the future
+
 const resultCache = new Map(); 
 const termCache = new Map(); // Cache for term lookups
 const fuzzyTermCache = new Map(); // Cache for fuzzy term variations

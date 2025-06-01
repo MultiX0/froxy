@@ -5,7 +5,7 @@ services:
       - "3090:3090"
     env_file:
       - .env
-    environment:
+    environment:    # You do not need to add the env in this way you can implemented as you want
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
