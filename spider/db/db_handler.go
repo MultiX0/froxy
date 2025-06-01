@@ -1,4 +1,3 @@
-// db/postgres.go - Improved version with better transaction and connection management
 package db
 
 import (
@@ -7,9 +6,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/froxy/models"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 )
 
@@ -30,7 +31,6 @@ func InitPostgres() error {
 	if dbSSLMode == "" {
 		dbSSLMode = "disable"
 	}
-
 	if dbPort == "" {
 		dbPort = "5432"
 	}
@@ -55,11 +55,10 @@ func InitPostgres() error {
 	}
 	log.Println("Successfully connected to PostgreSQL database.")
 
-	// Improved connection pool settings
-	db.SetMaxOpenConns(15)
-	db.SetMaxIdleConns(2)                  // Reduced idle connections
-	db.SetConnMaxLifetime(3 * time.Minute) // Connection lifetime
-	db.SetConnMaxIdleTime(time.Minute)     // Idle connection timeout
+	db.SetMaxOpenConns(50)                 // Increased for concurrent workers
+	db.SetMaxIdleConns(10)                 // Increased idle connections
+	db.SetConnMaxLifetime(5 * time.Minute) // Connection lifetime
+	db.SetConnMaxIdleTime(2 * time.Minute) // Idle connection timeout
 
 	pgHandler = &PostgresHandler{db: db}
 
@@ -75,8 +74,13 @@ func GetPostgresHandler() *PostgresHandler {
 	return pgHandler
 }
 
-// Context-aware transaction wrapper
+// Enhanced transaction wrapper with better error handling
 func (p *PostgresHandler) withTransaction(ctx context.Context, fn func(*sql.Tx) error) error {
+	// Validate connection before starting transaction
+	if err := p.HealthCheck(); err != nil {
+		return fmt.Errorf("database health check failed before transaction: %w", err)
+	}
+
 	tx, err := p.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelReadCommitted,
 	})
@@ -84,11 +88,14 @@ func (p *PostgresHandler) withTransaction(ctx context.Context, fn func(*sql.Tx) 
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	committed := false
+	var committed bool
 	defer func() {
 		if !committed {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Printf("ERROR: Failed to rollback transaction: %v", rbErr)
+				// Only log rollback errors if they're not due to already closed transaction
+				if !strings.Contains(rbErr.Error(), "already been committed or rolled back") {
+					log.Printf("ERROR: Failed to rollback transaction: %v", rbErr)
+				}
 			}
 		}
 	}()
@@ -107,7 +114,7 @@ func (p *PostgresHandler) withTransaction(ctx context.Context, fn func(*sql.Tx) 
 
 func (p *PostgresHandler) createTables() error {
 	// Use context with timeout for table creation
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
 	createPagesTable := `
@@ -203,9 +210,84 @@ func (p *PostgresHandler) createTables() error {
 	return nil
 }
 
+// Batch insert for headings
+func (p *PostgresHandler) batchInsertHeadings(ctx context.Context, tx *sql.Tx, pageID int, headings map[string][]string) error {
+	if len(headings) == 0 {
+		return nil
+	}
+
+	// Prepare batch insert statement
+	stmt, err := tx.PrepareContext(ctx, "INSERT INTO page_headings (page_id, heading_type, text) VALUES ($1, $2, $3)")
+	if err != nil {
+		return fmt.Errorf("failed to prepare heading insert statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for tag, texts := range headings {
+		if len(tag) > 10 {
+			log.Printf("WARNING: Heading type '%s' exceeds 10 characters, skipping", tag)
+			continue
+		}
+		for _, text := range texts {
+			if _, err := stmt.ExecContext(ctx, pageID, tag, text); err != nil {
+				return fmt.Errorf("failed to insert heading: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+// Batch insert for links
+func (p *PostgresHandler) batchInsertLinks(ctx context.Context, tx *sql.Tx, pageID int, links []models.Link) error {
+	if len(links) == 0 {
+		return nil
+	}
+
+	// Use batch insert with prepared statement for better performance
+	stmt, err := tx.PrepareContext(ctx, "INSERT INTO links (from_page_id, to_url, anchor_text, link_type) VALUES ($1, $2, $3, $4)")
+	if err != nil {
+		return fmt.Errorf("failed to prepare link insert statement: %w", err)
+	}
+	defer stmt.Close()
+
+	// Process links in batches to avoid memory issues
+	batchSize := 100
+	for i := 0; i < len(links); i += batchSize {
+		end := i + batchSize
+		if end > len(links) {
+			end = len(links)
+		}
+
+		for j := i; j < end; j++ {
+			link := links[j]
+			if _, err := stmt.ExecContext(ctx, pageID, link.URL, link.Text, "external"); err != nil {
+				// Check if it's a connection error
+				if pqErr, ok := err.(*pq.Error); ok {
+					log.Printf("PostgreSQL error inserting link: %v (Code: %s)", err, pqErr.Code)
+				}
+				return fmt.Errorf("failed to insert link batch at index %d: %w", j, err)
+			}
+		}
+
+		// Check context between batches
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+	}
+
+	return nil
+}
+
 func (p *PostgresHandler) UpsertPageData(pageData models.PageData) error {
-	// Use context with timeout for the entire operation
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+
+	timeout := 60 * time.Second
+	if len(pageData.OutboundLinks) > 100 {
+		timeout = 120 * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	return p.withTransaction(ctx, func(tx *sql.Tx) error {
@@ -276,43 +358,25 @@ func (p *PostgresHandler) UpsertPageData(pageData models.PageData) error {
 			}
 		}
 
-		// Insert headings in batch if possible
-		if len(pageData.Headings) > 0 {
-			for tag, texts := range pageData.Headings {
-				if len(tag) > 10 {
-					log.Printf("WARNING: Heading type '%s' exceeds 10 characters, skipping", tag)
-					continue
-				}
-				for _, text := range texts {
-					_, err := tx.ExecContext(ctx, "INSERT INTO page_headings (page_id, heading_type, text) VALUES ($1, $2, $3)",
-						pageID, tag, text)
-					if err != nil {
-						log.Printf("ERROR: Failed to insert heading for page ID %d: %v", pageID, err)
-						return fmt.Errorf("failed to insert heading: %w", err)
-					}
-				}
-			}
+		// Use batch insert for headings
+		if err := p.batchInsertHeadings(ctx, tx, pageID, pageData.Headings); err != nil {
+			log.Printf("ERROR: Failed to batch insert headings for page ID %d: %v", pageID, err)
+			return fmt.Errorf("failed to insert headings: %w", err)
 		}
 
-		// Insert outbound links in batch if possible
-		if len(pageData.OutboundLinks) > 0 {
-			for _, link := range pageData.OutboundLinks {
-				_, err := tx.ExecContext(ctx, "INSERT INTO links (from_page_id, to_url, anchor_text, link_type) VALUES ($1, $2, $3, $4)",
-					pageID, link.URL, link.Text, "external")
-				if err != nil {
-					log.Printf("ERROR: Failed to insert link for page ID %d: %v", pageID, err)
-					return fmt.Errorf("failed to insert link: %w", err)
-				}
-			}
+		// Use batch insert for links
+		if err := p.batchInsertLinks(ctx, tx, pageID, pageData.OutboundLinks); err != nil {
+			log.Printf("ERROR: Failed to batch insert links for page ID %d: %v", pageID, err)
+			return fmt.Errorf("failed to insert links: %w", err)
 		}
 
-		log.Printf("Successfully stored page data for %s (ID: %d)", pageData.URL, pageID)
+		log.Printf("Successfully stored page data for %s (ID: %d, Links: %d)", pageData.URL, pageID, len(pageData.OutboundLinks))
 		return nil
 	})
 }
 
 func (p *PostgresHandler) GetPageByURL(url string) (*models.PageData, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	pageData := &models.PageData{
@@ -405,14 +469,26 @@ func (p *PostgresHandler) GetPageCount() (int, error) {
 	return count, nil
 }
 
-// Health check method to verify database connectivity
+// health check method
 func (p *PostgresHandler) HealthCheck() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if p == nil || p.db == nil {
+		return fmt.Errorf("database handler or connection is nil")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Test both connectivity and basic query execution
 	if err := p.db.PingContext(ctx); err != nil {
-		return fmt.Errorf("database health check failed: %w", err)
+		return fmt.Errorf("database ping failed: %w", err)
 	}
+
+	// Test with a simple query to ensure the connection is truly functional
+	var result int
+	if err := p.db.QueryRowContext(ctx, "SELECT 1").Scan(&result); err != nil {
+		return fmt.Errorf("database query test failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -424,13 +500,13 @@ func (p *PostgresHandler) Close() error {
 	return nil
 }
 
-// Graceful shutdown helper
+// shutdown helper
 func (p *PostgresHandler) GracefulShutdown(timeout time.Duration) error {
 	if p.db == nil {
 		return nil
 	}
 
-	// Create a context with timeout for graceful shutdown
+	// Create a context with timeout for shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -438,7 +514,7 @@ func (p *PostgresHandler) GracefulShutdown(timeout time.Duration) error {
 	done := make(chan error, 1)
 
 	go func() {
-		log.Println("Initiating graceful database shutdown...")
+		log.Println("Initiating database shutdown...")
 		done <- p.db.Close()
 	}()
 

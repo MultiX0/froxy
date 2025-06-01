@@ -31,13 +31,14 @@ type Crawler struct {
 	Ctx          context.Context
 	cancel       context.CancelFunc
 	shutdownChan chan os.Signal
+	httpClient   *http.Client
 }
 
 var robotsCache = make(map[string]*robotstxt.RobotsData)
 var robotsCacheMu sync.RWMutex
 
 var (
-	timesleep    = time.Second
+	timesleep    = 2 * time.Second
 	userAgent    = "FroxyBot/1.0"
 	pagesCrawled = 0
 )
@@ -48,8 +49,18 @@ func NewCrawler() *Crawler {
 	shutdownChan := make(chan os.Signal, 1)
 	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Pre-initialize the LinksQueue slice
 	linksQueue := make([]models.Link, 0)
+
+	// Create HTTP client with better settings
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     30 * time.Second,
+			DisableKeepAlives:   false, // Enable keep-alives for better performance
+		},
+	}
 
 	crawler := &Crawler{
 		QueuedUrls:   make(map[string]bool),
@@ -59,9 +70,9 @@ func NewCrawler() *Crawler {
 		Ctx:          ctx,
 		cancel:       cancel,
 		shutdownChan: shutdownChan,
+		httpClient:   httpClient,
 	}
 
-	// Validate initialization
 	if crawler.Mu == nil {
 		log.Fatal("Failed to initialize mutex")
 	}
@@ -71,7 +82,6 @@ func NewCrawler() *Crawler {
 
 	return crawler
 }
-
 func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 	// Validate crawler state
 	if c == nil {
@@ -84,13 +94,17 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 	}
 
 	if len(seedUrls) == 0 {
-		log.Println("No seed URLs provided.")
+		logText := "No seed URLs provided."
+		log.Println(logText)
+		appendLog(logText)
 		return
 	}
 
 	if parsedURL, err := url.Parse(seedUrls[0]); err == nil {
 		c.BaseDomain = parsedURL.Host
 		log.Printf("Set BaseDomain to: %s", c.BaseDomain)
+		appendLog(fmt.Sprintf("Set BaseDomain to: %s", c.BaseDomain))
+
 	}
 
 	for _, url := range seedUrls {
@@ -116,6 +130,8 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 				select {
 				case <-c.Ctx.Done():
 					log.Printf("Worker %d: Shutdown signal received", id)
+					appendLog("Worker %d: Shutdown signal received")
+
 					return
 				default:
 				}
@@ -237,6 +253,7 @@ func (c *Crawler) safeEnqueue(link models.Link) {
 	c.QueuedUrls[link.URL] = true
 
 	log.Printf("Enqueued: %s, Queue size: %d", link.URL, len(*c.LinksQueue))
+	appendLog(fmt.Sprintf("Enqueued: %s, Queue size: %d", link.URL, len(*c.LinksQueue)))
 }
 
 func (c *Crawler) CrawlPage(websiteUrl string) error {
@@ -246,6 +263,8 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 
 	if _, visited := c.VisitedUrls[websiteUrl]; visited {
 		log.Printf("%s already visited, skipping", websiteUrl)
+		appendLog(fmt.Sprintf("%s already visited, skipping", websiteUrl))
+
 		return nil
 	}
 
@@ -267,6 +286,8 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 
 	if err := c.CheckingRobotsRules((protocol + domain), targetPath); err != nil {
 		log.Printf("Robots.txt blocked %s: %v", websiteUrl, err)
+		appendLog(fmt.Sprintf("Robots.txt blocked %s: %v", websiteUrl, err))
+
 		return fmt.Errorf("robots.txt blocked: %w", err)
 	}
 
@@ -276,9 +297,7 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 
 	startTime := time.Now()
 
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-	}
+	client := c.httpClient
 
 	request, err := http.NewRequestWithContext(ctx, "GET", websiteUrl, nil)
 	if err != nil {
@@ -372,6 +391,7 @@ func (c *Crawler) storePageDataWithRetry(pageData *models.PageData, maxRetries i
 		err := db.GetPostgresHandler().UpsertPageData(*pageData)
 		if err == nil {
 			log.Printf("Successfully stored page data for: %s", pageData.URL)
+			appendLog(fmt.Sprintf("Successfully stored page data for: %s", pageData.URL))
 			return nil
 		}
 
