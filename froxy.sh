@@ -245,13 +245,8 @@ func main() {
 
     defer db.GetPostgresHandler().GracefulShutdown(time.Second * 5)
 
-    crawler := functions.Crawler{
-        LinksQueue:  &[]models.Link{},
-        VisitedUrls: map[string]struct{}{},
-        QueuedUrls:  map[string]bool{},
-        Mu:          &sync.Mutex{},
-        Ctx:         context.Background(),
-    }
+	crawler := functions.NewCrawler()
+
 
     var crawlableSites = []string{
         $(echo -e "$url_list"),
