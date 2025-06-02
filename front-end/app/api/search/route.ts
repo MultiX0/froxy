@@ -1,37 +1,75 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server";
+import rateLimit from "express-rate-limit";
+
+// Create a rate limiter (100 requests per 60 seconds per IP)
+const limiter = rateLimit({
+  windowMs: 60 * 1000, // 60 seconds
+  max: 100, // Max 100 requests per window
+  keyGenerator: (req: NextRequest) => {
+    return req.headers.get("x-forwarded-for")?.split(",")[0] || "anonymous";
+  },
+  handler: (req, res, next) => {
+    // Return a 429 JSON response for Next.js
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  },
+  skipFailedRequests: true, // Don't count failed requests toward the limit
+});
+
+// Middleware to adapt express-rate-limit for Next.js
+async function applyRateLimit(req: NextRequest): Promise<NextResponse | null> {
+  return new Promise((resolve) => {
+    limiter(req as any, {} as any, (result:any) => {
+      if (result instanceof NextResponse) {
+        resolve(result);
+      } else {
+        resolve(null);
+      }
+    });
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const query = searchParams.get("q")
-    const fuzzy = searchParams.get("fuzzy")
+    // Apply rate limiting
+    const rateLimitResponse = await applyRateLimit(request);
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
+    const searchParams = request.nextUrl.searchParams;
+    const query = searchParams.get("q");
+    const fuzzy = searchParams.get("fuzzy") || "false";
 
     if (!query) {
-      return NextResponse.json({ error: "Query parameter is required" }, { status: 400 })
+      return NextResponse.json({ error: "Query parameter is required" }, { status: 400 });
     }
 
-    const apiUrl = process.env.API_URL
-    const apiKey = process.env.API_KEY
+    const apiUrl = process.env.API_URL;
+    const apiKey = process.env.API_KEY;
 
-    if (!apiKey) {
-      console.error("API key not found in environment variables")
-      return NextResponse.json({ error: "API configuration error" }, { status: 500 })
+    if (!apiUrl || !apiKey) {
+      console.error("API configuration missing", { apiUrl: !!apiUrl, apiKey: !!apiKey });
+      return NextResponse.json({ error: "API configuration error" }, { status: 500 });
     }
 
-    const response = await fetch(`${apiUrl}/search?q=${encodeURIComponent(query)}&fuzzy=${fuzzy}`, {
+    const response = await fetch(`${apiUrl}/search?q=${encodeURIComponent(query)}&fuzzy=${encodeURIComponent(fuzzy)}`, {
       headers: {
         "x-api-key": apiKey,
       },
-    })
+    });
 
     if (!response.ok) {
-      throw new Error(`External API error: ${response.status}`)
+      console.error(`External API error: ${response.status} - ${response.statusText}`);
+      return NextResponse.json(
+        { error: `External API error: ${response.statusText}` },
+        { status: response.status }
+      );
     }
 
-    const data = await response.json()
-    return NextResponse.json(data)
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error) {
-    console.error("Search API error:", error)
-    return NextResponse.json({ error: "Failed to fetch search results" }, { status: 500 })
+    console.error("Search API error:", error);
+    return NextResponse.json({ error: "Failed to fetch search results" }, { status: 500 });
   }
 }
