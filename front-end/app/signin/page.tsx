@@ -150,22 +150,11 @@ export default function SignInPage() {
                 Privacy Policy
               </Link>
             </p>
-          </div>
 
-          {/* Bottom Stats */}
-          <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
-              <div className="text-lg sm:text-xl font-bold text-white">10K+</div>
-              <div className="text-xs text-gray-400">Active Users</div>
-            </div>
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
-              <div className="text-lg sm:text-xl font-bold text-white">99.9%</div>
-              <div className="text-xs text-gray-400">Uptime</div>
-            </div>
-            <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-4">
-              <div className="text-lg sm:text-xl font-bold text-white">4.9★</div>
-              <div className="text-xs text-gray-400">Rating</div>
-            </div>
+            {/* Disclaimer */}
+            <p className="text-xs text-red-500 mt-4 text-center leading-relaxed">
+              It is not real for now, it is just a UI, not real interaction with AI yet
+            </p>
           </div>
         </div>
       </main>

@@ -266,7 +266,7 @@ export default function FroxySearch() {
   <div className="inline-flex items-center bg-gray-900/40 backdrop-blur-xl border border-gray-700/30 rounded-full p-1">
     <button
       onClick={() => setSearchMode("search")}
-      className={`flex items-center px-5 py-3 rounded-full text-l font-mono transition-all duration-200 ${
+      className={`flex items-center px-4 py-2 rounded-full text-l font-mono transition-all duration-200 ${
         searchMode === "search"
           ? "bg-blue-500 text-white shadow-lg"
           : "text-gray-400 hover:text-white"
@@ -277,7 +277,7 @@ export default function FroxySearch() {
     </button>
     <button
       onClick={() => setSearchMode("ai")}
-      className={`flex items-center px-5 py-3 rounded-full text-l font-mono transition-all duration-200 ${
+      className={`flex items-center px-4 py-2 rounded-full text-l font-mono transition-all duration-200 ${
         searchMode === "ai"
           ? "bg-purple-500 text-white shadow-lg"
           : "text-gray-400 hover:text-white"

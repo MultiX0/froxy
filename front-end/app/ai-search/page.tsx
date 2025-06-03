@@ -18,6 +18,8 @@ import {
   Sparkles,
   Zap,
   LogOut,
+  Menu,
+  X,
 } from "lucide-react"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
@@ -295,6 +297,7 @@ export default function AISearchPage() {
   const [copied, setCopied] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const responseRef = useRef<HTMLDivElement>(null)
 
@@ -364,6 +367,7 @@ export default function AISearchPage() {
       router.push(`/ai-search?q=${encodeURIComponent(finalQuery.trim())}`)
       setSuggestions([])
       setIsFocused(false)
+      setIsMenuOpen(false)
     }
   }
 
@@ -380,9 +384,11 @@ export default function AISearchPage() {
       router.push(`/ai-search?q=${encodeURIComponent(suggestions[selectedSuggestion].trim())}`)
       setSuggestions([])
       setIsFocused(false)
+      setIsMenuOpen(false)
     } else if (e.key === "Escape") {
       setIsFocused(false)
       setSuggestions([])
+      setIsMenuOpen(false)
     }
   }
 
@@ -390,6 +396,7 @@ export default function AISearchPage() {
     setSearchQuery(suggestion)
     setSuggestions([])
     setIsFocused(false)
+    setIsMenuOpen(false)
     router.push(`/ai-search?q=${encodeURIComponent(suggestion.trim())}`)
   }
 
@@ -406,6 +413,11 @@ export default function AISearchPage() {
   const handleSignOut = () => {
     localStorage.removeItem("user_authenticated")
     router.push("/")
+    setIsMenuOpen(false)
+  }
+
+  const toggleMenu = () => {
+    setIsMenuOpen((prev) => !prev)
   }
 
   const showSuggestions = suggestions.length > 0 && isFocused
@@ -443,110 +455,156 @@ export default function AISearchPage() {
 
       {/* Header */}
       <header className="relative z-10 border-b border-gray-800/50 bg-black/80 backdrop-blur-md sticky top-0">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3">
-          <div className="flex items-center gap-4">
-            {/* Logo */}
-            <Link href="/" className="text-xl font-bold text-white font-mono">
-              <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">FROXY</span>
-            </Link>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          {/* Logo */}
+          <Link href="/" className="text-2xl font-bold text-white mr-0 sm:mr-6">
+            <span className="text-blue-400 font-mono">FROXY</span>
+          </Link>
 
-            {/* Search Bar */}
-            <form onSubmit={handleSearch} className="flex-1 max-w-2xl relative">
-              <div className="relative">
-                <div
-                  className={`relative bg-gray-900/40 backdrop-blur-xl border rounded-full transition-all duration-300 ${
-                    isFocused
-                      ? "border-purple-500/50 shadow-lg shadow-purple-500/10"
-                      : "border-gray-700/30 hover:border-gray-600/50"
-                  }`}
-                >
-                  <div className="flex items-center">
-                    <Brain
-                      className={`absolute left-3 w-4 h-4 transition-colors duration-300 ${
-                        isFocused ? "text-purple-400" : "text-gray-500"
-                      }`}
-                    />
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onFocus={() => setIsFocused(true)}
-                      onBlur={() => setTimeout(() => setIsFocused(false), 150)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Ask anything..."
-                      className="w-full py-2.5 pl-10 pr-10 bg-transparent text-white text-sm focus:outline-none font-mono placeholder-gray-400"
-                    />
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="flex-1 max-w-2xl relative mx-2 sm:mx-4">
+            <div className="relative">
+              <div
+                className={`relative bg-gray-900/40 backdrop-blur-xl border rounded-full transition-all duration-300 ${
+                  isFocused
+                    ? "border-purple-500/50 shadow-lg shadow-purple-500/10"
+                    : "border-gray-700/30 hover:border-gray-600/50"
+                }`}
+              >
+                <div className="flex items-center">
+                  <Brain
+                    className={`absolute left-3 w-4 h-4 transition-colors duration-300 ${
+                      isFocused ? "text-purple-400" : "text-gray-500"
+                    }`}
+                  />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setTimeout(() => setIsFocused(false), 150)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask anything..."
+                    className="w-full py-2.5 pl-10 pr-10 bg-transparent text-white text-sm focus:outline-none font-mono placeholder-gray-400"
+                  />
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className={`absolute right-2 p-1.5 rounded-full transition-all duration-300 ${
+                      searchQuery.length > 0
+                        ? "bg-purple-500 hover:bg-purple-600 text-white"
+                        : "bg-gray-700/50 text-gray-400"
+                    }`}
+                  >
+                    {loading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Suggestions */}
+              {showSuggestions && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl overflow-hidden z-50">
+                  {suggestions.map((suggestion, index) => (
                     <button
-                      type="submit"
-                      disabled={loading}
-                      className={`absolute right-2 p-1.5 rounded-full transition-all duration-300 ${
-                        searchQuery.length > 0
-                          ? "bg-purple-500 hover:bg-purple-600 text-white"
-                          : "bg-gray-700/50 text-gray-400"
+                      key={suggestion}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        selectSuggestion(suggestion)
+                      }}
+                      className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 font-mono ${
+                        index === selectedSuggestion
+                          ? "bg-purple-500/20 text-purple-300"
+                          : "text-gray-300 hover:bg-gray-800/50 hover:text-white"
                       }`}
                     >
-                      {loading ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      )}
+                      <Brain className="inline w-4 h-4 mr-3 text-gray-500" />
+                      {suggestion}
                     </button>
-                  </div>
+                  ))}
                 </div>
-
-                {/* Suggestions */}
-                {showSuggestions && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl overflow-hidden z-50">
-                    {suggestions.map((suggestion, index) => (
-                      <button
-                        key={suggestion}
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault()
-                          selectSuggestion(suggestion)
-                        }}
-                        className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 font-mono ${
-                          index === selectedSuggestion
-                            ? "bg-purple-500/20 text-purple-300"
-                            : "text-gray-300 hover:bg-gray-800/50 hover:text-white"
-                        }`}
-                      >
-                        <Brain className="inline w-4 h-4 mr-3 text-gray-500" />
-                        {suggestion}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </form>
-
-            {/* Navigation */}
-            <div className="flex items-center gap-4">
-              <Link
-                href="/search"
-                className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
-              >
-                <Search className="w-4 h-4 mr-2" />
-                Search
-              </Link>
-              <button
-                onClick={handleSignOut}
-                className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
-              >
-                <LogOut className="w-4 h-4 mr-2" />
-                Sign Out
-              </button>
-              <a
-                href="https://github.com/MultiX0/froxy"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors duration-200"
-              >
-                <Github className="w-4 h-4" />
-              </a>
+              )}
             </div>
+          </form>
+
+          {/* Hamburger Menu Button */}
+          <button
+            onClick={toggleMenu}
+            className="md:hidden text-gray-400 hover:text-white transition-colors duration-200 flex-shrink-0"
+          >
+            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </button>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center gap-4">
+            <Link
+              href="/search"
+              className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
+            >
+              <Search className="w-4 h-4 mr-2" />
+              Search
+            </Link>
+            <button
+              onClick={handleSignOut}
+              className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </button>
+            <a
+              href="https://github.com/MultiX0/froxy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-400 hover:text-white transition-colors duration-200"
+            >
+              <Github className="w-4 h-4" />
+            </a>
           </div>
+
+          {/* Mobile Menu */}
+          {isMenuOpen && (
+            <div className="absolute top-full left-0 right-0 bg-gray-900/95 backdrop-blur-xl border-b border-gray-800/50 z-50 md:hidden">
+              <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4">
+                <Link
+                  href="/"
+                  className="text-xl font-bold text-white font-mono"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">FROXY</span>
+                </Link>
+                <Link
+                  href="/search"
+                  className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <Search className="w-4 h-4 mr-2" />
+                  Search
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </button>
+                <a
+                  href="https://github.com/MultiX0/froxy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <Github className="w-4 h-4 mr-2" />
+                  GitHub
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
