@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import { Search, Github, ArrowRight, Brain, Sparkles, Zap } from "lucide-react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
+import type React from "react";
+import { useState, useEffect, useRef } from "react";
+import { Search, Github, ArrowRight, Brain, Sparkles, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 const searchSuggestions = [
   "JavaScript frameworks",
@@ -17,14 +17,9 @@ const searchSuggestions = [
   "API design patterns",
   "Database optimization",
   "Cloud computing",
-]
+];
 
-const placeholderTexts = [
-  "Search anything...",
-  "Ask me anything...",
-  "What would you like to know?",
-  "Search or ask a question...",
-]
+const placeholderTexts = ["Search anything...", "Ask me anything..."];
 
 const taglineTexts = [
   "Where curiosity meets answers",
@@ -35,162 +30,227 @@ const taglineTexts = [
   "Unleash the power of search",
   "Find what you're looking for",
   "Your intelligent search companion",
-]
+];
 
 const formatNumber = (num: number): string => {
   if (num >= 1000000000) {
-    return (num / 1000000000).toFixed(1).replace(/\.0$/, "") + "B"
+    return (num / 1000000000).toFixed(1).replace(/\.0$/, "") + "B";
   }
   if (num >= 1000000) {
-    return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M"
+    return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
   }
   if (num >= 1000) {
-    return (num / 1000).toFixed(1).replace(/\.0$/, "") + "k"
+    return (num / 1000).toFixed(1).replace(/\.0$/, "") + "k";
   }
-  return num.toString()
-}
+  return num.toString();
+};
 
 export default function FroxySearch() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isFocused, setIsFocused] = useState(false)
-  const [suggestions, setSuggestions] = useState<string[]>([])
-  const [selectedSuggestion, setSelectedSuggestion] = useState(-1)
-  const [currentPlaceholder, setCurrentPlaceholder] = useState("")
-  const [placeholderIndex, setPlaceholderIndex] = useState(0)
-  const [isTransitioning, setIsTransitioning] = useState(false)
-  const [currentTagline, setCurrentTagline] = useState("")
-  const [taglineIndex, setTaglineIndex] = useState(0)
-  const [isTaglineTransitioning, setIsTaglineTransitioning] = useState(false)
-  const [searchMode, setSearchMode] = useState<"search" | "ai">("search")
-  const router = useRouter()
-  const [resultsCount, setResultsCount] = useState(0)
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  const [isLoadingCount, setIsLoadingCount] = useState(true)
-  const [fuzzySearch, setFuzzySearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isFocused, setIsFocused] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedSuggestion, setSelectedSuggestion] = useState(-1);
+  const [currentPlaceholder, setCurrentPlaceholder] = useState("");
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [currentTagline, setCurrentTagline] = useState("");
+  const [taglineIndex, setTaglineIndex] = useState(0);
+  const [isTaglineTransitioning, setIsTaglineTransitioning] = useState(false);
+  const [searchMode, setSearchMode] = useState<"search" | "ai">("search");
+  const router = useRouter();
+  const [resultsCount, setResultsCount] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [isLoadingCount, setIsLoadingCount] = useState(true);
+  const [fuzzySearch, setFuzzySearch] = useState(false);
 
   // Initialize with random placeholder and tagline
   useEffect(() => {
-    const randomPlaceholderIndex = Math.floor(Math.random() * placeholderTexts.length)
-    const randomTaglineIndex = Math.floor(Math.random() * taglineTexts.length)
-    setPlaceholderIndex(randomPlaceholderIndex)
-    setCurrentPlaceholder(placeholderTexts[randomPlaceholderIndex])
-    setTaglineIndex(randomTaglineIndex)
-    setCurrentTagline(taglineTexts[randomTaglineIndex])
-  }, [])
+    const randomPlaceholderIndex = Math.floor(
+      Math.random() * placeholderTexts.length
+    );
+    const randomTaglineIndex = Math.floor(Math.random() * taglineTexts.length);
+    setPlaceholderIndex(randomPlaceholderIndex);
+    setCurrentPlaceholder(placeholderTexts[randomPlaceholderIndex]);
+    setTaglineIndex(randomTaglineIndex);
+    setCurrentTagline(taglineTexts[randomTaglineIndex]);
+  }, []);
 
   // Cycle through placeholders
   useEffect(() => {
     const interval = setInterval(() => {
-      setIsTransitioning(true)
+      setIsTransitioning(true);
       setTimeout(() => {
-        setPlaceholderIndex((prev) => (prev + 1) % placeholderTexts.length)
-        setIsTransitioning(false)
-      }, 200)
-    }, 4000)
-    return () => clearInterval(interval)
-  }, [])
+        setPlaceholderIndex((prev) => (prev + 1) % placeholderTexts.length);
+        setIsTransitioning(false);
+      }, 200);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Cycle through taglines
   useEffect(() => {
     const interval = setInterval(() => {
-      setIsTaglineTransitioning(true)
+      setIsTaglineTransitioning(true);
       setTimeout(() => {
-        setTaglineIndex((prev) => (prev + 1) % taglineTexts.length)
-        setIsTaglineTransitioning(false)
-      }, 300)
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [])
+        setTaglineIndex((prev) => (prev + 1) % taglineTexts.length);
+        setIsTaglineTransitioning(false);
+      }, 300);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!isTransitioning) {
-      setCurrentPlaceholder(placeholderTexts[placeholderIndex])
+      setCurrentPlaceholder(placeholderTexts[placeholderIndex]);
     }
-  }, [placeholderIndex, isTransitioning])
+  }, [placeholderIndex, isTransitioning]);
 
   useEffect(() => {
     if (!isTaglineTransitioning) {
-      setCurrentTagline(taglineTexts[taglineIndex])
+      setCurrentTagline(taglineTexts[taglineIndex]);
     }
-  }, [taglineIndex, isTaglineTransitioning])
+  }, [taglineIndex, isTaglineTransitioning]);
 
   useEffect(() => {
     if (searchQuery.length > 0) {
       const filtered = searchSuggestions
-        .filter((suggestion) => suggestion.toLowerCase().includes(searchQuery.toLowerCase()))
-        .slice(0, 5)
-      setSuggestions(filtered)
+        .filter((suggestion) =>
+          suggestion.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        .slice(0, 5);
+      setSuggestions(filtered);
     } else {
-      setSuggestions([])
+      setSuggestions([]);
     }
-    setSelectedSuggestion(-1)
-  }, [searchQuery])
+    setSelectedSuggestion(-1);
+  }, [searchQuery]);
 
   // Fetch results count
   useEffect(() => {
     const fetchResultsCount = async () => {
       try {
-        setIsLoadingCount(true)
-        const response = await fetch("/api/results-count")
+        setIsLoadingCount(true);
+        const response = await fetch("/api/results-count");
         if (response.ok) {
-          const data = await response.json()
-          setResultsCount(data.count || 0)
+          const data = await response.json();
+          setResultsCount(data.count || 0);
         }
       } catch (error) {
-        console.error("Failed to fetch results count:", error)
-        setResultsCount(64000)
+        console.error("Failed to fetch results count:", error);
+        setResultsCount(64000);
       } finally {
-        setIsLoadingCount(false)
+        setIsLoadingCount(false);
       }
-    }
-    fetchResultsCount()
-  }, [])
+    };
+    fetchResultsCount();
+  }, []);
 
   const toggleFuzzySearch = () => {
-    setFuzzySearch(!fuzzySearch)
-  }
+    setFuzzySearch(!fuzzySearch);
+  };
 
   const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    const query = selectedSuggestion >= 0 ? suggestions[selectedSuggestion] : searchQuery
+    e.preventDefault();
+    const query =
+      selectedSuggestion >= 0 ? suggestions[selectedSuggestion] : searchQuery;
     if (query.trim()) {
       if (searchMode === "ai") {
-        router.push(`/signin?redirect=${encodeURIComponent(`/ai-search?q=${encodeURIComponent(query.trim())}`)}`)
+        router.push(
+          `/signin?redirect=${encodeURIComponent(
+            `/ai-search?q=${encodeURIComponent(query.trim())}`
+          )}`
+        );
       } else {
-        router.push(`/search?q=${encodeURIComponent(query.trim())}&fuzzy=${fuzzySearch}`)
+        router.push(
+          `/search?q=${encodeURIComponent(query.trim())}&fuzzy=${fuzzySearch}`
+        );
       }
     }
-  }
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
-      e.preventDefault()
-      setSelectedSuggestion((prev) => (prev < suggestions.length - 1 ? prev + 1 : prev))
+      e.preventDefault();
+      setSelectedSuggestion((prev) =>
+        prev < suggestions.length - 1 ? prev + 1 : prev
+      );
     } else if (e.key === "ArrowUp") {
-      e.preventDefault()
-      setSelectedSuggestion((prev) => (prev > 0 ? prev - 1 : -1))
+      e.preventDefault();
+      setSelectedSuggestion((prev) => (prev > 0 ? prev - 1 : -1));
     } else if (e.key === "Enter" && selectedSuggestion >= 0) {
-      e.preventDefault()
-      const suggestion = suggestions[selectedSuggestion]
-      setSearchQuery(suggestion)
+      e.preventDefault();
+      const suggestion = suggestions[selectedSuggestion];
+      setSearchQuery(suggestion);
       if (searchMode === "ai") {
-        router.push(`/signin?redirect=${encodeURIComponent(`/ai-search?q=${encodeURIComponent(suggestion.trim())}`)}`)
+        router.push(
+          `/signin?redirect=${encodeURIComponent(
+            `/ai-search?q=${encodeURIComponent(suggestion.trim())}`
+          )}`
+        );
       } else {
-        router.push(`/search?q=${encodeURIComponent(suggestion.trim())}&fuzzy=${fuzzySearch}`)
+        router.push(
+          `/search?q=${encodeURIComponent(
+            suggestion.trim()
+          )}&fuzzy=${fuzzySearch}`
+        );
       }
     }
-  }
+  };
 
   const selectSuggestion = (suggestion: string) => {
-    setSearchQuery(suggestion)
-    setSuggestions([])
-    setIsFocused(false)
+    setSearchQuery(suggestion);
+    setSuggestions([]);
+    setIsFocused(false);
     if (searchMode === "ai") {
-      router.push(`/signin?redirect=${encodeURIComponent(`/ai-search?q=${encodeURIComponent(suggestion.trim())}`)}`)
+      router.push(
+        `/signin?redirect=${encodeURIComponent(
+          `/ai-search?q=${encodeURIComponent(suggestion.trim())}`
+        )}`
+      );
     } else {
-      router.push(`/search?q=${encodeURIComponent(suggestion.trim())}&fuzzy=${fuzzySearch}`)
+      router.push(
+        `/search?q=${encodeURIComponent(
+          suggestion.trim()
+        )}&fuzzy=${fuzzySearch}`
+      );
     }
-  }
+  };
+
+  type HealthStatus = "connecting" | "online" | "offline";
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>("connecting");
+  // Health check function
+  const checkHealth = async () => {
+    try {
+      setHealthStatus("connecting");
+      const response = await fetch("/api/health", {
+        method: "GET",
+        cache: "no-cache",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === "healthy") {
+          setHealthStatus("online");
+        } else {
+          setHealthStatus("offline");
+        }
+      } else {
+        setHealthStatus("offline");
+      }
+    } catch (error) {
+      console.error("Health check failed:", error);
+      setHealthStatus("offline");
+    }
+  };
+  useEffect(() => {
+    checkHealth();
+
+    const healthInterval = setInterval(() => {
+      checkHealth();
+    }, 60000); // Check every one minute
+
+    return () => clearInterval(healthInterval);
+  }, []);
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden flex flex-col items-center justify-center px-4">
@@ -201,50 +261,57 @@ export default function FroxySearch() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-gradient-to-r from-blue-500/4 to-purple-500/4 rounded-full blur-[160px]"></div>
       </div>
 
-      {/* Main Content */}
+{/* Search Mode Toggle */}
+<div className="mb-6">
+  <div className="inline-flex items-center bg-gray-900/40 backdrop-blur-xl border border-gray-700/30 rounded-full p-1">
+    <button
+      onClick={() => setSearchMode("search")}
+      className={`flex items-center px-5 py-3 rounded-full text-l font-mono transition-all duration-200 ${
+        searchMode === "search"
+          ? "bg-blue-500 text-white shadow-lg"
+          : "text-gray-400 hover:text-white"
+      }`}
+    >
+      <Search className="w-4 h-4 mr-1.5" />
+      Search
+    </button>
+    <button
+      onClick={() => setSearchMode("ai")}
+      className={`flex items-center px-5 py-3 rounded-full text-l font-mono transition-all duration-200 ${
+        searchMode === "ai"
+          ? "bg-purple-500 text-white shadow-lg"
+          : "text-gray-400 hover:text-white"
+      }`}
+    >
+      <Brain className="w-4 h-4 mr-1.5" />
+      Ask AI
+    </button>
+  </div>
+</div>      {/* Main Content */}
       <div className="relative z-10 w-full max-w-2xl mx-auto text-center">
         {/* Logo */}
         <div className="mb-10">
-        <h1 className="text-7xl font-bold text-white dark:text-white tracking-tight transition-colors duration-500 mb-1">
-        <span className="text-7xl bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 dark:from-blue-400 dark:via-blue-500 dark:to-cyan-400 bg-clip-text text-transparent drop-shadow-2xl">
-          FROXY
-        </span>
-      </h1>
+          <h1 className="text-7xl font-bold text-white dark:text-white tracking-tight transition-colors duration-500 mb-2">
+            <span className="text-7xl bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 dark:from-blue-400 dark:via-blue-500 dark:to-cyan-400 bg-clip-text text-transparent drop-shadow-2xl">
+              FROXY
+            </span>
+          </h1>
           <p
             className={`text-gray-400 text-xl font-mono transition-all duration-500 ${
-              isTaglineTransitioning ? "opacity-0 transform translate-y-2" : "opacity-100 transform translate-y-0"
+              isTaglineTransitioning
+                ? "opacity-0 transform translate-y-2"
+                : "opacity-100 transform translate-y-0"
             }`}
           >
             {currentTagline}
           </p>
         </div>
 
-        {/* Search Mode Toggle */}
-        <div className="mb-10">
-          <div className="inline-flex items-center bg-gray-900/40 backdrop-blur-xl border border-gray-700/30 rounded-full p-1.5">
-            <button
-              onClick={() => setSearchMode("search")}
-              className={`flex items-center px-6 py-3 rounded-full text-sm font-mono transition-all duration-200 ${
-                searchMode === "search" ? "bg-blue-500 text-white shadow-lg" : "text-gray-400 hover:text-white"
-              }`}
-            >
-              <Search className="w-4 h-4 mr-2" />
-              Search
-            </button>
-            <button
-              onClick={() => setSearchMode("ai")}
-              className={`flex items-center px-6 py-3 rounded-full text-sm font-mono transition-all duration-200 ${
-                searchMode === "ai" ? "bg-purple-500 text-white shadow-lg" : "text-gray-400 hover:text-white"
-              }`}
-            >
-              <Brain className="w-4 h-4 mr-2" />
-              Ask AI
-            </button>
-          </div>
-        </div>
-
         {/* Search Bar with Suggestions */}
-        <form onSubmit={handleSearch} className="mb-8 relative max-w-xl mx-auto">
+        <form
+          onSubmit={handleSearch}
+          className="mb-8 relative max-w-xl mx-auto"
+        >
           <div className="relative">
             <div
               className={`relative bg-gray-900/40 backdrop-blur-xl border rounded-2xl sm:rounded-full transition-all duration-300 ${
@@ -285,7 +352,11 @@ export default function FroxySearch() {
                   )}
                   {isFocused && (
                     <Zap
-                      className={`w-3 h-3 ${searchMode === "ai" ? "text-purple-400" : "text-blue-400"} animate-pulse`}
+                      className={`w-3 h-3 ${
+                        searchMode === "ai"
+                          ? "text-purple-400"
+                          : "text-blue-400"
+                      } animate-pulse`}
                     />
                   )}
                 </div>
@@ -329,7 +400,11 @@ export default function FroxySearch() {
                         }`}
                       ></div>
                     </div>
-                    <Sparkles className={`ml-1.5 w-3.5 h-3.5 ${fuzzySearch ? "text-blue-400" : "text-gray-500"}`} />
+                    <Sparkles
+                      className={`ml-1.5 w-3.5 h-3.5 ${
+                        fuzzySearch ? "text-blue-400" : "text-gray-500"
+                      }`}
+                    />
                   </div>
                 )}
 
@@ -378,63 +453,98 @@ export default function FroxySearch() {
           </div>
         </form>
 
-        {/* Stats Cards */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-16">
-          {/* Online Status Card */}
-          <div className="flex items-center px-6 py-3 text-sm text-blue-400/70 bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 rounded-full font-mono">
-            <div className="w-2.5 h-2.5 bg-green-400 rounded-full mr-3 animate-pulse"></div>
-            ONLINE
+        {/* Enhanced Quick Actions */}
+        <div className="flex flex-col items-center gap-6 mb-12 sm:mb-16">
+          {/* First row: GitHub and Online */}
+          <div className="flex flex-wrap justify-center gap-2 sm:gap-3">
+            <a
+              href="https://github.com/MultiX0/froxy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-gray-300 dark:text-gray-300 bg-gray-800/30 dark:bg-gray-800/30 backdrop-blur-sm border border-gray-700/30 dark:border-gray-700/30 rounded-full hover:bg-gray-700/40 dark:hover:bg-gray-700/40 hover:border-gray-600/50 dark:hover:border-gray-600/50 hover:text-white dark:hover:text-white transition-all duration-200 font-mono outline-none focus:outline-none focus:ring-0"
+              style={{ outline: "none", boxShadow: "none" }}
+            >
+              <Github className="w-4 h-4 mr-2" />
+              SOURCE_CODE
+            </a>
+
+            {/* Status display with proper conditional classes */}
+            {healthStatus === "connecting" && (
+              <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-orange-400/70 bg-orange-500/10 backdrop-blur-sm border border-orange-500/20 rounded-full font-mono">
+                <div className="w-2 h-2 bg-orange-400 rounded-full mr-2 animate-pulse"></div>
+                CONNECTING
+              </div>
+            )}
+
+            {healthStatus === "online" && (
+              <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-blue-400/70 bg-blue-500/10 backdrop-blur-sm border border-blue-500/20 rounded-full font-mono">
+                <div className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></div>
+                ONLINE
+              </div>
+            )}
+
+            {healthStatus === "offline" && (
+              <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-red-400/70 bg-red-500/10 backdrop-blur-sm border border-red-500/20 rounded-full font-mono">
+                <div className="w-2 h-2 bg-red-400 rounded-full mr-2"></div>
+                OFFLINE
+              </div>
+            )}
+
+            {/* Fuzzy Search Status */}
+            {fuzzySearch && (
+              <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-purple-400/70 bg-purple-500/10 backdrop-blur-sm border border-purple-500/20 rounded-full font-mono">
+                <Sparkles className="w-3.5 h-3.5 mr-2 text-purple-400" />
+                FUZZY SEARCH
+              </div>
+            )}
           </div>
 
-          {/* Results Count Card */}
-          <div className="flex items-center px-6 py-3 text-sm text-gray-300 bg-gray-800/20 backdrop-blur-sm border border-gray-700/20 rounded-full font-mono">
+          {/* Second row: Results counter */}
+          <div className="flex items-center px-4 sm:px-6 py-2 sm:py-2.5 text-sm text-gray-300 dark:text-gray-300 bg-gray-800/20 dark:bg-gray-800/20 backdrop-blur-sm border border-gray-700/20 dark:border-gray-700/20 rounded-full transition-all duration-200 font-mono">
             {isLoadingCount ? (
               <>
-                <div className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mr-3"></div>
+                <div className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mr-2"></div>
                 <span className="text-gray-400">Loading...</span>
               </>
             ) : (
               <>
-                <span className="text-blue-400/80">~{formatNumber(resultsCount)}</span>
-                <span className="mx-2">results</span>
+                <span className="text-blue-400/80">
+                  ~{formatNumber(resultsCount)}
+                </span>
+                <span className="mx-1">results</span>
                 <span className="text-gray-500 text-xs">(and growing)</span>
               </>
             )}
           </div>
-
-          {/* Fuzzy Search Status Card - only show when enabled and normal search selected */}
-          {fuzzySearch && searchMode === "search" && (
-            <div className="flex items-center px-6 py-3 text-sm text-purple-400/70 bg-purple-500/10 backdrop-blur-sm border border-purple-500/20 rounded-full font-mono">
-              <Sparkles className="w-4 h-4 mr-3 text-purple-400" />
-              FUZZY SEARCH
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="absolute bottom-8 left-0 right-0">
-        <div className="flex justify-center items-center space-x-8 text-xs text-gray-500 font-mono">
-          <Link href="/about" className="hover:text-blue-400 transition-colors duration-200">
-            About
-          </Link>
-          <Link href="/privacy" className="hover:text-blue-400 transition-colors duration-200">
-            Privacy
-          </Link>
-          <Link href="/terms" className="hover:text-blue-400 transition-colors duration-200">
-            Terms
-          </Link>
-          <a
-            href="https://github.com/MultiX0/froxy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center hover:text-blue-400 transition-colors duration-200"
+      {/* Enhanced Footer */}
+      <div className="absolute bottom-4 sm:bottom-8 left-0 right-0">
+        <div className="flex justify-center space-x-4 sm:space-x-8 text-xs sm:text-sm text-gray-500 dark:text-gray-500 px-4 font-mono">
+          <Link
+            href="/about"
+            className="hover:text-blue-400 transition-colors duration-200 outline-none focus:outline-none focus:ring-0"
+            style={{ outline: "none", boxShadow: "none" }}
           >
-            <Github className="w-3 h-3 mr-1" />
-            GitHub
-          </a>
+            ABOUT
+          </Link>
+          <Link
+            href="/privacy"
+            className="hover:text-blue-400 transition-colors duration-200 outline-none focus:outline-none focus:ring-0"
+            style={{ outline: "none", boxShadow: "none" }}
+          >
+            PRIVACY
+          </Link>
+          <Link
+            href="/terms"
+            className="hover:text-blue-400 transition-colors duration-200 outline-none focus:outline-none focus:ring-0"
+            style={{ outline: "none", boxShadow: "none" }}
+          >
+            TERMS
+          </Link>
         </div>
       </div>
     </div>
-  )
+  );
 }
