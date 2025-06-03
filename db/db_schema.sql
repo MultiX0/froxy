@@ -47,3 +47,14 @@ CREATE TABLE IF NOT EXISTS terms (
     term TEXT,
     CONSTRAINT terms_term_key UNIQUE (term)
 ) TABLESPACE pg_default;
+
+CREATE TABLE IF NOT EXISTS term_page_index (
+    id SERIAL PRIMARY KEY,
+    term_id INTEGER NOT NULL REFERENCES terms(id) ON DELETE CASCADE,
+    page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+    term_frequency INTEGER NOT NULL DEFAULT 0,
+    tf_idf DECIMAL(10,6) NOT NULL DEFAULT 0,
+    field VARCHAR(50) NOT NULL DEFAULT 'content',
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT term_page_index_unique UNIQUE (term_id, page_id, field)
+);
