@@ -6,22 +6,41 @@ services:
     user: postgres
     env_file:
       - .env
-    environment:  # You do not need to add the env in this way you can implemented as you want
+    environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata  # Isolate actual data
     ports:
       - "5432:5432"
     volumes:
-      - ./postgres_data:/var/lib/postgresql/data
+      - ./postgres_data:/var/lib/postgresql/data/pgdata
       - ./db_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./db_indexes.sql:/docker-entrypoint-initdb.d/02_indexes.sql
-      - ./certs/server.crt:/var/lib/postgresql/server.crt:ro
-      - ./certs/server.key:/var/lib/postgresql/server.key:ro
+      # uncomment those if you need to setup ssl
+      # - ./certs/server.crt:/var/lib/postgresql/server.crt:ro 
+      # - ./certs/server.key:/var/lib/postgresql/server.key:ro
     command: >
-      postgres -c ssl=on
-               -c ssl_cert_file=/var/lib/postgresql/server.crt
-               -c ssl_key_file=/var/lib/postgresql/server.key
+      postgres -c max_connections=100
+               -c shared_buffers=512MB
+               -c work_mem=16MB
+               -c maintenance_work_mem=64MB
+               -c effective_cache_size=1GB
+               -c random_page_cost=1.1
+               -c logging_collector=on
+               -c log_statement=none
+               -c log_min_duration_statement=500
+               -c timezone=UTC
+    # uncomment those if you need to setup ssl
+    #  -c ssl=on
+    #  -c ssl_cert_file=/var/lib/postgresql/server.crt
+    #  -c ssl_key_file=/var/lib/postgresql/server.key
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   pg_backup:
     image: postgres:16
