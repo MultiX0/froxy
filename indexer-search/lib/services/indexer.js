@@ -1,217 +1,154 @@
-const { smartTokenize } = require("../functions/functions");
+const { generateUUIDFromURL } = require("../functions/functions");
 const { query, getClient } = require("./db_service");
+const { embed } = require("./embedding_service");
+const { uploadPoints } = require("./qdrant_service");
 
 const BATCH_SIZE = 500; // batch size
 const PARALLEL_BATCHES = 2; // parallel batches
-const PARALLEL_UPSERTS = 100; // concurrent upserts
 const PROCESS_CHUNK_SIZE = 2000; // Process pages in smaller chunks
-
-// Create the term_page_index table
-async function createTermPageIndexTable() {
-  const createTableQuery = `
-    CREATE TABLE IF NOT EXISTS term_page_index (
-      id SERIAL PRIMARY KEY,
-      term_id INTEGER NOT NULL REFERENCES terms(id) ON DELETE CASCADE,
-      page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-      term_frequency INTEGER NOT NULL DEFAULT 0,
-      tf_idf DECIMAL(10,6) NOT NULL DEFAULT 0,
-      field VARCHAR(50) NOT NULL DEFAULT 'content',
-      created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT term_page_index_unique UNIQUE (term_id, page_id, field)
-    );
-    
-    -- Create indexes for better performance
-    CREATE INDEX IF NOT EXISTS idx_term_page_index_term_id ON term_page_index(term_id);
-    CREATE INDEX IF NOT EXISTS idx_term_page_index_page_id ON term_page_index(page_id);
-    CREATE INDEX IF NOT EXISTS idx_term_page_index_tf_idf ON term_page_index(tf_idf DESC);
-  `;
-  
-  await query(createTableQuery);
-  console.log("term_page_index table created/verified");
-}
 
 async function getPagesBatch(offset, limit) {
   console.log(`Fetching pages ${offset} - ${offset + limit - 1}`);
 
-  const result = await query(
-    "SELECT id, title, meta_description, content FROM pages ORDER BY id LIMIT $1 OFFSET $2",
-    [limit, offset]
-  );
+  const result = await query(`
+    SELECT 
+      p.id, 
+      p.qdrant_id,
+      p.url, 
+      p.title, 
+      p.status_code,
+      COALESCE(outlinks.out_links, 0) as out_links,
+      COALESCE(inlinks.in_links, 0) as in_links
+    FROM pages p
+    LEFT JOIN (
+      SELECT 
+        from_page_id, 
+        COUNT(*) as out_links 
+      FROM links 
+      GROUP BY from_page_id
+    ) outlinks ON p.id = outlinks.from_page_id
+    LEFT JOIN (
+      SELECT 
+        to_url, 
+        COUNT(*) as in_links 
+      FROM links 
+      GROUP BY to_url
+    ) inlinks ON p.url = inlinks.to_url
+    WHERE p.status_code = 200
+    ORDER BY p.id 
+    LIMIT $1 OFFSET $2
+  `, [limit, offset]);
 
   console.log(`Fetched ${result.rows.length} pages`);
+  
+  // Check and update any pages with null qdrant_id
+  await ensureQdrantIdsForBatch(result.rows);
+  
   return result.rows;
 }
 
-async function getOrCreateTermId(term, termCache) {
-  if (termCache.has(term)) return termCache.get(term);
-
-  try {
-    // Try to get existing term
-    const existingResult = await query("SELECT id FROM terms WHERE term = $1", [term]);
-
-    if (existingResult.rows.length > 0) {
-      const termId = existingResult.rows[0].id;
-      termCache.set(term, termId);
-      return termId;
-    }
-
-    // Insert new term
-    const insertResult = await query(
-      "INSERT INTO terms (term) VALUES ($1) RETURNING id",
-      [term]
-    );
-
-    const termId = insertResult.rows[0].id;
-    termCache.set(term, termId);
-    return termId;
-  } catch (error) {
-    // Handle potential race condition with UPSERT
-    if (error.code === "23505") {
-      // unique_violation
-      const retryResult = await query("SELECT id FROM terms WHERE term = $1", [term]);
-      if (retryResult.rows.length > 0) {
-        const termId = retryResult.rows[0].id;
-        termCache.set(term, termId);
-        return termId;
-      }
-    }
-
-    console.error(`Failed to insert term "${term}":`, error);
-    return null;
-  }
-}
-
-// Process a batch of pages and return their term frequencies
-async function processPagesTokenization(pages) {
-  const batchTermFrequencies = new Map();
-  const batchDocumentFrequency = new Map();
-
-  for (const page of pages) {
-    const tokens = smartTokenize(
-      `${page.title || ""} ${page.meta_description || ""} ${page.content || ""}`
-    );
-    const tf = new Map();
-
-    // Count term frequencies
-    for (const term of tokens) {
-      tf.set(term, (tf.get(term) || 0) + 1);
-    }
-
-    batchTermFrequencies.set(page.id, tf);
-
-    // Track document frequency
-    for (const [term] of tf) {
-      if (!batchDocumentFrequency.has(term)) {
-        batchDocumentFrequency.set(term, new Set());
-      }
-      batchDocumentFrequency.get(term).add(page.id);
-    }
-  }
-
-  return { batchTermFrequencies, batchDocumentFrequency };
-}
-
-// Get global document frequencies for terms
-async function getGlobalDocumentFrequencies(terms, totalPages) {
-  const globalDF = new Map();
+// Check and update qdrant_id for pages in a batch that have null values
+async function ensureQdrantIdsForBatch(pages) {
+  const pagesToUpdate = pages.filter(page => !page.qdrant_id);
   
-  // Process terms in batches to avoid large IN clauses
-  const termBatchSize = 1000;
-  for (let i = 0; i < terms.length; i += termBatchSize) {
-    const termBatch = terms.slice(i, i + termBatchSize);
-    const placeholders = termBatch.map((_, idx) => `$${idx + 1}`).join(',');
-    
-    const result = await query(`
-      SELECT t.term, COUNT(DISTINCT tpi.page_id) as doc_count
-      FROM terms t 
-      LEFT JOIN term_page_index tpi ON t.id = tpi.term_id
-      WHERE t.term IN (${placeholders})
-      GROUP BY t.term
-    `, termBatch);
-    
-    for (const row of result.rows) {
-      globalDF.set(row.term, parseInt(row.doc_count) || 0);
-    }
+  if (pagesToUpdate.length === 0) {
+    return;
   }
   
-  return globalDF;
-}
-
-// Process database upserts with transaction batching
-async function processUpsertsInParallel(upsertTasks, concurrency = PARALLEL_UPSERTS) {
-  let indexedCount = 0;
+  console.log(`Updating qdrant_id for ${pagesToUpdate.length} pages in batch...`);
+  
   const client = await getClient();
-
-  // We need to implement reading replica in the future
-  // So that when we search on something but the same time the indexer is running
-  // We need to be isolated so there is no preformance issues
-
-  // await client.query('SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED');
-
+  
   try {
-    for (let i = 0; i < upsertTasks.length; i += concurrency) {
-      const batch = upsertTasks.slice(i, i + concurrency);
-
-      await client.query('BEGIN');
-      
-      try {
-        const results = await Promise.allSettled(
-          batch.map(async (task) => {
-            const { term, pageId, termFreq, tfIdf, termCache } = task;
-
-            const termId = await getOrCreateTermId(term, termCache);
-            if (!termId) return { success: false, term, pageId };
-
-            await client.query(
-              `INSERT INTO term_page_index (term_id, page_id, term_frequency, field, tf_idf)
-               VALUES ($1, $2, $3, $4, $5)
-               ON CONFLICT (term_id, page_id, field) 
-               DO UPDATE SET 
-                 term_frequency = EXCLUDED.term_frequency,
-                 tf_idf = EXCLUDED.tf_idf`,
-              [termId, parseInt(pageId), termFreq, "content", tfIdf]
-            );
-
-            return { success: true, term, pageId };
-          })
-        );
-
-        await client.query('COMMIT');
-
-        const successful = results.filter(
-          (r) => r.status === "fulfilled" && r.value.success
-        ).length;
-        indexedCount += successful;
-
-        if (indexedCount % 1000 === 0 || i + concurrency >= upsertTasks.length) {
-          console.log(`Indexed ${indexedCount} term-page combinations...`);
-        }
-      } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('Batch upsert failed:', error);
-      }
+    await client.query("BEGIN");
+    
+    for (const page of pagesToUpdate) {
+      const qdrantId = generateUUIDFromURL(page.url);
+      await client.query(
+        "UPDATE pages SET qdrant_id = $1 WHERE id = $2",
+        [qdrantId, page.id]
+      );
+      // Update the page object with the new qdrant_id
+      page.qdrant_id = qdrantId;
     }
+    
+    await client.query("COMMIT");
+    console.log(`Updated qdrant_id for ${pagesToUpdate.length} pages in batch`);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Failed to update qdrant_ids for batch:", error);
+    throw error;
   } finally {
     client.release();
   }
-
-  return indexedCount;
 }
 
-async function calculateTfIdfInBatches() {
-  console.log("Starting memory-optimized TF-IDF calculation...");
+// Function to get page content from the database
+async function getPageContent(pageId) {
+  // Since content is now stored in Qdrant, we need to fetch it from there
+  // or if you have content stored elsewhere, adjust this query
+  const result = await query(`
+    SELECT content, meta_description 
+    FROM page_content 
+    WHERE page_id = $1
+  `, [pageId]);
+  
+  if (result.rows.length > 0) {
+    return {
+      content: result.rows[0].content || '',
+      meta_description: result.rows[0].meta_description || ''
+    };
+  }
+  
+  return { content: '', meta_description: '' };
+}
 
-  // Create the table first
-  await createTermPageIndexTable();
+async function processEmbeddingsForBatch(pages) {
+  const embeddings = [];
 
-  const countResult = await query("SELECT COUNT(*) as count FROM pages");
+  for (const page of pages) {
+    try {
+      // Get content for this page (adjust based on where you store content)
+      const { content, meta_description } = await getPageContent(page.id);
+      
+      const textToEmbed = `${page.title || ""} ${meta_description || ""} ${content || ""}`.trim();
+
+      if (textToEmbed) {
+        const embedding = await embed(textToEmbed);
+        
+        embeddings.push({
+          id: page.qdrant_id, // This will now always be set
+          vector: embedding,
+          payload: {
+            page_id: page.id,
+            url: page.url,
+            title: page.title || '',
+            content: content || '',
+            description: meta_description || '',
+            status: page.status_code,
+            out_links: page.out_links,
+            in_links: page.in_links,
+          },
+        });
+      }
+    } catch (error) {
+      console.error(`Failed to generate embedding for page ${page.id}:`, error);
+    }
+  }
+
+  return embeddings;
+}
+
+async function indexPagesToQdrant() {
+  console.log("Starting Qdrant indexing from PostgreSQL...");
+
+  const countResult = await query("SELECT COUNT(*) as count FROM pages WHERE status_code = 200");
   const totalPages = parseInt(countResult.rows[0].count);
 
   console.log(`Total pages to index: ${totalPages}`);
-  console.log(`Using ${PARALLEL_BATCHES} parallel batch(es) and ${PARALLEL_UPSERTS} concurrent upserts`);
+  console.log(`Using ${PARALLEL_BATCHES} parallel batch(es)`);
   console.log(`Processing in chunks of ${PROCESS_CHUNK_SIZE} pages to manage memory`);
 
-  const termCache = new Map();
   let totalIndexedCount = 0;
 
   // Process pages in chunks to avoid memory issues
@@ -219,80 +156,32 @@ async function calculateTfIdfInBatches() {
     const chunkEnd = Math.min(chunkStart + PROCESS_CHUNK_SIZE, totalPages);
     console.log(`\nProcessing chunk: pages ${chunkStart} - ${chunkEnd - 1}`);
 
-    const chunkTermFrequencies = new Map();
-    const chunkDocumentFrequency = new Map();
-
-    // Step 1: Fetch and tokenize pages in this chunk
-    console.log("Phase 1: Tokenizing chunk pages...");
-    
+    // Process batches within this chunk
     for (let offset = chunkStart; offset < chunkEnd; offset += BATCH_SIZE * PARALLEL_BATCHES) {
       const currentBatchPromises = [];
 
+      // Create parallel batch promises
       for (let i = 0; i < PARALLEL_BATCHES && offset + i * BATCH_SIZE < chunkEnd; i++) {
         const batchOffset = offset + i * BATCH_SIZE;
         const batchLimit = Math.min(BATCH_SIZE, chunkEnd - batchOffset);
 
         currentBatchPromises.push(
-          getPagesBatch(batchOffset, batchLimit).then(processPagesTokenization)
+          getPagesBatch(batchOffset, batchLimit).then(processEmbeddingsForBatch)
         );
       }
 
-      const batchResults = await Promise.all(currentBatchPromises);
+      // Wait for all batches to complete
+      const embeddingResults = await Promise.all(currentBatchPromises);
 
-      // Merge results from parallel batches
-      for (const { batchTermFrequencies, batchDocumentFrequency } of batchResults) {
-        // Merge term frequencies
-        for (const [pageId, tf] of batchTermFrequencies) {
-          chunkTermFrequencies.set(pageId, tf);
-        }
-
-        // Merge document frequencies
-        for (const [term, pageSet] of batchDocumentFrequency) {
-          if (!chunkDocumentFrequency.has(term)) {
-            chunkDocumentFrequency.set(term, new Set());
-          }
-          for (const pageId of pageSet) {
-            chunkDocumentFrequency.get(term).add(pageId);
-          }
-        }
+      // Flatten and upload embeddings to Qdrant
+      const allEmbeddings = embeddingResults.flat();
+      if (allEmbeddings.length > 0) {
+        await uploadPoints(allEmbeddings);
+        totalIndexedCount += allEmbeddings.length;
+        console.log(`Indexed ${totalIndexedCount}/${totalPages} pages to Qdrant...`);
       }
     }
 
-    // Step 2: Get all unique terms from this chunk
-    const chunkTerms = Array.from(chunkDocumentFrequency.keys());
-    console.log(`Phase 2: Getting global document frequencies for ${chunkTerms.length} unique terms...`);
-    
-    // Get global document frequencies (considering all pages processed so far)
-    const globalDF = await getGlobalDocumentFrequencies(chunkTerms, totalPages);
-
-    // Step 3: Calculate TF-IDF and prepare upsert tasks for this chunk
-    console.log("Phase 3: Calculating TF-IDF scores for chunk...");
-    const upsertTasks = [];
-
-    for (const [pageId, tf] of chunkTermFrequencies) {
-      for (const [term, termFreq] of tf) {
-        // Use global document frequency if available, otherwise use chunk frequency
-        const df = globalDF.get(term) || chunkDocumentFrequency.get(term)?.size || 1;
-        const idf = Math.log(totalPages / Math.max(df, 1));
-        const tfIdf = termFreq * idf;
-
-        upsertTasks.push({ term, pageId, termFreq, tfIdf, termCache });
-      }
-    }
-
-    console.log(`Prepared ${upsertTasks.length} upsert tasks for this chunk`);
-
-    // Step 4: Process upserts for this chunk
-    console.log("Phase 4: Upserting chunk to database...");
-    const chunkIndexedCount = await processUpsertsInParallel(upsertTasks);
-    totalIndexedCount += chunkIndexedCount;
-
-    console.log(`Chunk complete! Indexed ${chunkIndexedCount} entries (Total: ${totalIndexedCount})`);
-    
-    // Clear chunk data to free memory
-    chunkTermFrequencies.clear();
-    chunkDocumentFrequency.clear();
-    
     // Force garbage collection if available
     if (global.gc) {
       global.gc();
@@ -300,23 +189,59 @@ async function calculateTfIdfInBatches() {
     }
   }
 
-  console.log(`\n Memory-optimized TF-IDF indexing complete! Total indexed entries: ${totalIndexedCount}`);
+  console.log(`\nQdrant indexing complete! Total indexed pages: ${totalIndexedCount}`);
+}
+
+// Utility function to update qdrant_id for existing pages
+async function updateQdrantIds() {
+  console.log("Updating qdrant_id for existing pages...");
+  
+  const result = await query("SELECT id, url FROM pages WHERE qdrant_id IS NULL");
+  const pages = result.rows;
+  
+  console.log(`Found ${pages.length} pages without qdrant_id`);
+  
+  const client = await getClient();
+  
+  try {
+    await client.query("BEGIN");
+    
+    for (const page of pages) {
+      const qdrantId = generateUUIDFromURL(page.url);
+      await client.query(
+        "UPDATE pages SET qdrant_id = $1 WHERE id = $2",
+        [qdrantId, page.id]
+      );
+    }
+    
+    await client.query("COMMIT");
+    console.log(`Updated qdrant_id for ${pages.length} pages`);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Failed to update qdrant_ids:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = {
-  calculateTfIdfInBatches,
-  createTermPageIndexTable
+  generateUUIDFromURL,
+  indexPagesToQdrant,
+  updateQdrantIds,
+  ensureQdrantIdsForBatch,
 };
 
 // Run if called directly
-// if (require.main === module) {
-//   calculateTfIdfInBatches()
-//     .then(() => {
-//       console.log("TF-IDF calculation completed successfully");
-//       process.exit(0);
-//     })
-//     .catch((error) => {
-//       console.error("TF-IDF calculation failed:", error);
-//       process.exit(1);
-//     });
-// }
+if (require.main === module) {
+  // Start indexing directly - qdrant_ids will be created on-the-fly as needed
+  indexPagesToQdrant()
+    .then(() => {
+      console.log("Qdrant indexing completed successfully");
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error("Qdrant indexing failed:", error);
+      process.exit(1);
+    });
+}

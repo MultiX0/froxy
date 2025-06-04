@@ -10,17 +10,20 @@ import (
 	"time"
 
 	"github.com/froxy/models"
+	"github.com/froxy/utils"
 	"github.com/lib/pq"
 	_ "github.com/lib/pq"
+	"github.com/qdrant/go-client/qdrant"
 )
 
 type PostgresHandler struct {
-	db *sql.DB
+	db           *sql.DB
+	qdrantClient *qdrant.Client
 }
 
 var pgHandler *PostgresHandler
 
-func InitPostgres() error {
+func InitPostgres(qdrantClient *qdrant.Client) error {
 	dbHost := os.Getenv("DB_HOST")
 	dbPort := os.Getenv("DB_PORT")
 	dbUser := os.Getenv("DB_USER")
@@ -55,12 +58,15 @@ func InitPostgres() error {
 	}
 	log.Println("Successfully connected to PostgreSQL database.")
 
-	db.SetMaxOpenConns(50)                 // Increased for concurrent workers
-	db.SetMaxIdleConns(10)                 // Increased idle connections
-	db.SetConnMaxLifetime(5 * time.Minute) // Connection lifetime
-	db.SetConnMaxIdleTime(2 * time.Minute) // Idle connection timeout
+	db.SetMaxOpenConns(50)
+	db.SetMaxIdleConns(10)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 
-	pgHandler = &PostgresHandler{db: db}
+	pgHandler = &PostgresHandler{
+		db:           db,
+		qdrantClient: qdrantClient,
+	}
 
 	if err := pgHandler.createTables(); err != nil {
 		return fmt.Errorf("failed to create tables: %v", err)
@@ -76,7 +82,6 @@ func GetPostgresHandler() *PostgresHandler {
 
 // Enhanced transaction wrapper with better error handling
 func (p *PostgresHandler) withTransaction(ctx context.Context, fn func(*sql.Tx) error) error {
-	// Validate connection before starting transaction
 	if err := p.HealthCheck(); err != nil {
 		return fmt.Errorf("database health check failed before transaction: %w", err)
 	}
@@ -92,7 +97,6 @@ func (p *PostgresHandler) withTransaction(ctx context.Context, fn func(*sql.Tx) 
 	defer func() {
 		if !committed {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				// Only log rollback errors if they're not due to already closed transaction
 				if !strings.Contains(rbErr.Error(), "already been committed or rolled back") {
 					log.Printf("ERROR: Failed to rollback transaction: %v", rbErr)
 				}
@@ -113,93 +117,53 @@ func (p *PostgresHandler) withTransaction(ctx context.Context, fn func(*sql.Tx) 
 }
 
 func (p *PostgresHandler) createTables() error {
-	// Use context with timeout for table creation
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
+	// Simplified pages table with UUID for Qdrant sync
 	createPagesTable := `
-    CREATE TABLE IF NOT EXISTS pages (
-        id SERIAL PRIMARY KEY,
-        url TEXT NOT NULL,
-        title TEXT,
-        meta_description TEXT,
-        meta_keywords TEXT,
-        language TEXT,
-        canonical TEXT,
-        content TEXT,
-        word_count INTEGER DEFAULT 0,
-        status_code INTEGER,
-        response_time INTEGER,
-        content_type TEXT,
-        last_modified TIMESTAMP WITHOUT TIME ZONE,
-        crawl_date TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT pages_url_key UNIQUE (url)
-    );`
+	CREATE TABLE IF NOT EXISTS pages (
+		id SERIAL PRIMARY KEY,
+		qdrant_id UUID NOT NULL UNIQUE,
+		url TEXT NOT NULL UNIQUE,
+		title TEXT,
+		status_code INTEGER,
+		crawl_date TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);`
 
-	createPageHeadingsTable := `
-    CREATE TABLE IF NOT EXISTS page_headings (
-        id SERIAL NOT NULL,
-        page_id INTEGER,
-        heading_type CHARACTER VARYING(10) NOT NULL,
-        text TEXT NOT NULL,
-        position INTEGER DEFAULT 1,
-        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT page_headings_pkey PRIMARY KEY (id),
-        CONSTRAINT page_headings_page_id_fkey FOREIGN KEY (page_id) REFERENCES pages (id) ON DELETE CASCADE
-    );`
-
+	// Links table for relationship tracking
 	createLinksTable := `
-    CREATE TABLE IF NOT EXISTS links (
-        id SERIAL PRIMARY KEY,
-        from_page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
-        to_url TEXT NOT NULL,
-        anchor_text TEXT,
-        link_type CHARACTER VARYING(20) DEFAULT 'external',
-        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    );`
+	CREATE TABLE IF NOT EXISTS links (
+		id SERIAL PRIMARY KEY,
+		from_page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
+		to_url TEXT NOT NULL,
+		anchor_text TEXT,
+		link_type CHARACTER VARYING(20) DEFAULT 'external',
+		created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);`
 
-	createTermsTable := `
-    CREATE TABLE IF NOT EXISTS terms (
-        id SERIAL PRIMARY KEY,
-        term TEXT,
-        CONSTRAINT terms_term_key UNIQUE (term)
-    );`
-
+	// Create indexes
 	createIndexes := []string{
-		"CREATE INDEX IF NOT EXISTS idx_pages_url ON pages USING btree (url);",
-		"CREATE INDEX IF NOT EXISTS idx_pages_crawl_date ON pages USING btree (crawl_date);",
-		"CREATE INDEX IF NOT EXISTS idx_pages_language ON pages USING btree (language);",
-		"CREATE INDEX IF NOT EXISTS idx_pages_status_code ON pages USING btree (status_code);",
-		"CREATE INDEX IF NOT EXISTS idx_pages_response_time ON pages USING btree (response_time);",
-		"CREATE INDEX IF NOT EXISTS idx_pages_last_modified ON pages USING btree (last_modified);",
-		"CREATE INDEX IF NOT EXISTS idx_pages_language_time ON pages USING btree (language, crawl_date DESC);",
-		"CREATE INDEX IF NOT EXISTS idx_page_headings_page_id ON page_headings USING btree (page_id);",
-		"CREATE INDEX IF NOT EXISTS idx_page_headings_type ON page_headings USING btree (heading_type);",
-		"CREATE INDEX IF NOT EXISTS idx_page_headings_position ON page_headings USING btree (position);",
-		"CREATE INDEX IF NOT EXISTS idx_links_from_page_id ON links USING btree (from_page_id);",
-		"CREATE INDEX IF NOT EXISTS idx_links_to_url ON links USING btree (to_url);",
-		"CREATE INDEX IF NOT EXISTS idx_links_type ON links USING btree (link_type);",
-		"CREATE INDEX IF NOT EXISTS idx_links_anchor_text ON links USING btree (anchor_text);",
-		"CREATE UNIQUE INDEX IF NOT EXISTS idx_terms_term ON terms USING btree (term);",
+		"CREATE INDEX IF NOT EXISTS idx_pages_url ON pages(url);",
+		"CREATE INDEX IF NOT EXISTS idx_pages_qdrant_id ON pages(qdrant_id);",
+		"CREATE INDEX IF NOT EXISTS idx_links_from_page_id ON links(from_page_id);",
+		"CREATE INDEX IF NOT EXISTS idx_links_to_url ON links(to_url);",
 	}
 
 	tables := []string{
 		createPagesTable,
-		createPageHeadingsTable,
 		createLinksTable,
-		createTermsTable,
 	}
 
-	// Create tables with context
+	// Create tables
 	for _, query := range tables {
 		if _, err := p.db.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("failed to create table: %v", err)
 		}
 	}
 
-	// Create indexes with context
+	// Create indexes
 	for _, query := range createIndexes {
 		if _, err := p.db.ExecContext(ctx, query); err != nil {
 			return fmt.Errorf("failed to create index: %v", err)
@@ -210,47 +174,18 @@ func (p *PostgresHandler) createTables() error {
 	return nil
 }
 
-// Batch insert for headings
-func (p *PostgresHandler) batchInsertHeadings(ctx context.Context, tx *sql.Tx, pageID int, headings map[string][]string) error {
-	if len(headings) == 0 {
-		return nil
-	}
-
-	// Prepare batch insert statement
-	stmt, err := tx.PrepareContext(ctx, "INSERT INTO page_headings (page_id, heading_type, text) VALUES ($1, $2, $3)")
-	if err != nil {
-		return fmt.Errorf("failed to prepare heading insert statement: %w", err)
-	}
-	defer stmt.Close()
-
-	for tag, texts := range headings {
-		if len(tag) > 10 {
-			log.Printf("WARNING: Heading type '%s' exceeds 10 characters, skipping", tag)
-			continue
-		}
-		for _, text := range texts {
-			if _, err := stmt.ExecContext(ctx, pageID, tag, text); err != nil {
-				return fmt.Errorf("failed to insert heading: %w", err)
-			}
-		}
-	}
-	return nil
-}
-
 // Batch insert for links
 func (p *PostgresHandler) batchInsertLinks(ctx context.Context, tx *sql.Tx, pageID int, links []models.Link) error {
 	if len(links) == 0 {
 		return nil
 	}
 
-	// Use batch insert with prepared statement for better performance
 	stmt, err := tx.PrepareContext(ctx, "INSERT INTO links (from_page_id, to_url, anchor_text, link_type) VALUES ($1, $2, $3, $4)")
 	if err != nil {
 		return fmt.Errorf("failed to prepare link insert statement: %w", err)
 	}
 	defer stmt.Close()
 
-	// Process links in batches to avoid memory issues
 	batchSize := 100
 	for i := 0; i < len(links); i += batchSize {
 		end := i + batchSize
@@ -261,7 +196,6 @@ func (p *PostgresHandler) batchInsertLinks(ctx context.Context, tx *sql.Tx, page
 		for j := i; j < end; j++ {
 			link := links[j]
 			if _, err := stmt.ExecContext(ctx, pageID, link.URL, link.Text, "external"); err != nil {
-				// Check if it's a connection error
 				if pqErr, ok := err.(*pq.Error); ok {
 					log.Printf("PostgreSQL error inserting link: %v (Code: %s)", err, pqErr.Code)
 				}
@@ -269,7 +203,6 @@ func (p *PostgresHandler) batchInsertLinks(ctx context.Context, tx *sql.Tx, page
 			}
 		}
 
-		// Check context between batches
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -280,63 +213,38 @@ func (p *PostgresHandler) batchInsertLinks(ctx context.Context, tx *sql.Tx, page
 	return nil
 }
 
+// UpsertPageData - Simplified with integrated Qdrant upsert
 func (p *PostgresHandler) UpsertPageData(pageData models.PageData) error {
-
-	timeout := 60 * time.Second
+	timeout := 120 * time.Second // Increased for embedding generation
 	if len(pageData.OutboundLinks) > 100 {
-		timeout = 120 * time.Second
+		timeout = 180 * time.Second
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	return p.withTransaction(ctx, func(tx *sql.Tx) error {
-		// Prepare nullable last_modified for DB insertion
-		var lastModified sql.NullTime
-		if !pageData.LastModified.IsZero() {
-			lastModified = sql.NullTime{Time: pageData.LastModified, Valid: true}
-		}
+	// Generate deterministic UUID for Qdrant
+	qdrantID := utils.GenerateUUIDFromURL(pageData.URL)
 
-		// Convert response time to milliseconds for storage
-		responseTimeMs := int(pageData.ResponseTime.Milliseconds())
-
-		// Upsert page data with context
-		var pageID int
+	var pageID int
+	err := p.withTransaction(ctx, func(tx *sql.Tx) error {
+		// Upsert page data
 		upsertPageQuery := `
-            INSERT INTO pages (
-                url, title, meta_description, meta_keywords, language, canonical,
-                content, word_count, status_code, response_time, content_type,
-                last_modified, crawl_date, updated_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
-            ON CONFLICT (url) DO UPDATE SET
-                title = EXCLUDED.title,
-                meta_description = EXCLUDED.meta_description,
-                meta_keywords = EXCLUDED.meta_keywords,
-                language = EXCLUDED.language,
-                canonical = EXCLUDED.canonical,
-                content = EXCLUDED.content,
-                word_count = EXCLUDED.word_count,
-                status_code = EXCLUDED.status_code,
-                response_time = EXCLUDED.response_time,
-                content_type = EXCLUDED.content_type,
-                last_modified = EXCLUDED.last_modified,
-                crawl_date = EXCLUDED.crawl_date,
-                updated_at = CURRENT_TIMESTAMP
-            RETURNING id;`
+			INSERT INTO pages (
+				qdrant_id, url, title, status_code, crawl_date, updated_at
+			) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+			ON CONFLICT (url) DO UPDATE SET
+				title = EXCLUDED.title,
+				status_code = EXCLUDED.status_code,
+				crawl_date = EXCLUDED.crawl_date,
+				updated_at = CURRENT_TIMESTAMP
+			RETURNING id;`
 
 		err := tx.QueryRowContext(ctx, upsertPageQuery,
+			qdrantID,
 			pageData.URL,
 			pageData.Title,
-			pageData.MetaDescription,
-			pageData.MetaKeywords,
-			pageData.Language,
-			pageData.Canonical,
-			pageData.MainContent,
-			pageData.WordCount,
 			pageData.StatusCode,
-			responseTimeMs,
-			pageData.ContentType,
-			lastModified,
 			pageData.CrawlDate,
 		).Scan(&pageID)
 
@@ -345,131 +253,98 @@ func (p *PostgresHandler) UpsertPageData(pageData models.PageData) error {
 			return fmt.Errorf("failed to upsert page data: %w", err)
 		}
 
-		// Delete existing related data before re-inserting
-		deleteQueries := []string{
-			"DELETE FROM page_headings WHERE page_id = $1",
-			"DELETE FROM links WHERE from_page_id = $1",
+		// Delete existing links before re-inserting
+		if _, err := tx.ExecContext(ctx, "DELETE FROM links WHERE from_page_id = $1", pageID); err != nil {
+			log.Printf("ERROR: Failed to delete existing links for page ID %d: %v", pageID, err)
+			return fmt.Errorf("failed to delete existing links: %w", err)
 		}
 
-		for _, query := range deleteQueries {
-			if _, err := tx.ExecContext(ctx, query, pageID); err != nil {
-				log.Printf("ERROR: Failed to delete existing data for page ID %d: %v", pageID, err)
-				return fmt.Errorf("failed to delete existing data: %w", err)
-			}
-		}
-
-		// Use batch insert for headings
-		if err := p.batchInsertHeadings(ctx, tx, pageID, pageData.Headings); err != nil {
-			log.Printf("ERROR: Failed to batch insert headings for page ID %d: %v", pageID, err)
-			return fmt.Errorf("failed to insert headings: %w", err)
-		}
-
-		// Use batch insert for links
+		// Batch insert links
 		if err := p.batchInsertLinks(ctx, tx, pageID, pageData.OutboundLinks); err != nil {
 			log.Printf("ERROR: Failed to batch insert links for page ID %d: %v", pageID, err)
 			return fmt.Errorf("failed to insert links: %w", err)
 		}
 
-		log.Printf("Successfully stored page data for %s (ID: %d, Links: %d)", pageData.URL, pageID, len(pageData.OutboundLinks))
 		return nil
 	})
+
+	if err != nil {
+		return fmt.Errorf("failed to upsert page to PostgreSQL: %w", err)
+	}
+
+	// upsert to Qdrant
+	if err := UpsertPageToQdrant(p.qdrantClient, pageData); err != nil {
+		log.Printf("ERROR: Failed to upsert page to Qdrant for URL %s: %v", pageData.URL, err)
+		return fmt.Errorf("failed to upsert page to Qdrant: %w", err)
+	}
+
+	log.Printf("Successfully stored page data for %s (PostgreSQL ID: %d, Qdrant ID: %s, Links: %d)",
+		pageData.URL, pageID, qdrantID, len(pageData.OutboundLinks))
+
+	return nil
 }
 
-func (p *PostgresHandler) GetPageByURL(url string) (*models.PageData, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+// GetPageByURL - Simplified
+// func (p *PostgresHandler) GetPageByURL(url string) (*models.PageData, error) {
+// 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+// 	defer cancel()
 
-	pageData := &models.PageData{
-		Headings:      make(map[string][]string),
-		OutboundLinks: make([]models.Link, 0),
-	}
+// 	pageData := &models.PageData{
+// 		OutboundLinks: make([]models.Link, 0),
+// 	}
 
-	var pageID int
-	var lastModified sql.NullTime
-	var responseTimeMs int
-	query := `
-        SELECT id, url, title, meta_description, meta_keywords, language, canonical,
-               content, word_count, status_code, response_time, content_type,
-               last_modified, crawl_date, created_at, updated_at
-        FROM pages WHERE url = $1`
+// 	var pageID int
+// 	var qdrantID string
+// 	query := `
+// 		SELECT id, qdrant_id, url, title, status_code, crawl_date, updated_at
+// 		FROM pages WHERE url = $1`
 
-	err := p.db.QueryRowContext(ctx, query, url).Scan(
-		&pageID, &pageData.URL, &pageData.Title, &pageData.MetaDescription,
-		&pageData.MetaKeywords, &pageData.Language, &pageData.Canonical,
-		&pageData.MainContent, &pageData.WordCount, &pageData.StatusCode,
-		&responseTimeMs, &pageData.ContentType, &lastModified, &pageData.CrawlDate,
-		&pageData.CrawlDate, &pageData.LastModified,
-	)
+// 	err := p.db.QueryRowContext(ctx, query, url).Scan(
+// 		&pageID, &qdrantID, &pageData.URL, &pageData.Title,
+// 		&pageData.StatusCode, &pageData.CrawlDate, &pageData.LastModified,
+// 	)
 
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get page data: %w", err)
-	}
+// 	if err != nil {
+// 		if err == sql.ErrNoRows {
+// 			return nil, nil
+// 		}
+// 		return nil, fmt.Errorf("failed to get page data: %w", err)
+// 	}
 
-	if lastModified.Valid {
-		pageData.LastModified = lastModified.Time
-	} else {
-		pageData.LastModified = time.Time{}
-	}
+// 	// Get outbound links
+// 	linksQuery := "SELECT to_url, anchor_text FROM links WHERE from_page_id = $1 ORDER BY id"
+// 	rows, err := p.db.QueryContext(ctx, linksQuery, pageID)
+// 	if err != nil {
+// 		return nil, fmt.Errorf("failed to get links: %w", err)
+// 	}
+// 	defer rows.Close()
 
-	pageData.ResponseTime = time.Duration(responseTimeMs) * time.Millisecond
+// 	for rows.Next() {
+// 		var link models.Link
+// 		if err := rows.Scan(&link.URL, &link.Text); err != nil {
+// 			return nil, fmt.Errorf("failed to scan link: %w", err)
+// 		}
+// 		pageData.OutboundLinks = append(pageData.OutboundLinks, link)
+// 	}
+// 	if err = rows.Err(); err != nil {
+// 		return nil, fmt.Errorf("error iterating links: %w", err)
+// 	}
 
-	// Get headings with context
-	headingsQuery := "SELECT heading_type, text FROM page_headings WHERE page_id = $1 ORDER BY id"
-	rows, err := p.db.QueryContext(ctx, headingsQuery, pageID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get headings: %w", err)
-	}
-	defer rows.Close()
+// 	return pageData, nil
+// }
 
-	for rows.Next() {
-		var tag, text string
-		if err := rows.Scan(&tag, &text); err != nil {
-			return nil, fmt.Errorf("failed to scan heading: %w", err)
-		}
-		pageData.Headings[tag] = append(pageData.Headings[tag], text)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating headings: %w", err)
-	}
+// func (p *PostgresHandler) GetPageCount() (int, error) {
+// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// 	defer cancel()
 
-	// Get outbound links with context
-	linksQuery := "SELECT to_url, anchor_text FROM links WHERE from_page_id = $1 ORDER BY id"
-	rows, err = p.db.QueryContext(ctx, linksQuery, pageID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get links: %w", err)
-	}
-	defer rows.Close()
+// 	var count int
+// 	err := p.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pages").Scan(&count)
+// 	if err != nil {
+// 		return 0, fmt.Errorf("failed to get page count: %w", err)
+// 	}
+// 	return count, nil
+// }
 
-	for rows.Next() {
-		var link models.Link
-		if err := rows.Scan(&link.URL, &link.Text); err != nil {
-			return nil, fmt.Errorf("failed to scan link: %w", err)
-		}
-		pageData.OutboundLinks = append(pageData.OutboundLinks, link)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating links: %w", err)
-	}
-
-	return pageData, nil
-}
-
-func (p *PostgresHandler) GetPageCount() (int, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var count int
-	err := p.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM pages").Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get page count: %w", err)
-	}
-	return count, nil
-}
-
-// health check method
 func (p *PostgresHandler) HealthCheck() error {
 	if p == nil || p.db == nil {
 		return fmt.Errorf("database handler or connection is nil")
@@ -478,12 +353,10 @@ func (p *PostgresHandler) HealthCheck() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Test both connectivity and basic query execution
 	if err := p.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("database ping failed: %w", err)
 	}
 
-	// Test with a simple query to ensure the connection is truly functional
 	var result int
 	if err := p.db.QueryRowContext(ctx, "SELECT 1").Scan(&result); err != nil {
 		return fmt.Errorf("database query test failed: %w", err)
@@ -500,17 +373,14 @@ func (p *PostgresHandler) Close() error {
 	return nil
 }
 
-// shutdown helper
 func (p *PostgresHandler) GracefulShutdown(timeout time.Duration) error {
 	if p.db == nil {
 		return nil
 	}
 
-	// Create a context with timeout for shutdown
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Channel to signal completion
 	done := make(chan error, 1)
 
 	go func() {

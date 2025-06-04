@@ -46,3 +46,7 @@ db/.env
 db/certs/server.crt
 db/certs/server.key
 /front-end/README.md
+
+
+fastembed/models/
+qdrant/qdrant_storage/

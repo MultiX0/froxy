@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  embedding-service:
+    build: .
+    ports:
+      - "5050:5050"
+    environment:
+      - PORT=5050
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - froxy-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+    volumes:
+      # Mount models directory to persist downloaded models
+      - ./models:/app/models
+
+networks:
+  froxy-network:
+    external: true

@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   app:
     build: .
@@ -5,7 +7,7 @@ services:
       - "3090:3090"
     env_file:
       - .env
-    environment:    # You do not need to add the env in this way you can implemented as you want
+    environment:
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
@@ -15,8 +17,12 @@ services:
       API_KEY: ${API_KEY}
       PORT: ${PORT}
       DB_SSL: ${DB_SSL}
+      NODE_MEMORY_LIMIT: "1024"
+      # embedding service URL
+      EMBEDDING_SERVICE_URL: "http://embedding-service:5050"
     restart: unless-stopped
-    network_mode: "host"
+    networks:
+      - froxy-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3090/health"]
       interval: 30s
@@ -25,6 +31,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 3G
+          memory: 2G
+          cpus: "1.0"
         reservations:
           memory: 512M
+
+networks:
+  froxy-network:
+    external: true

@@ -1,0 +1,17 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant_server
+    ports:
+    # - "127.0.0.1:6333:6333"
+    # - "127.0.0.1:6334:6334"
+    - "6333:6333"  # API
+    - "6334:6334"  # gRPC (if you want)
+
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+    environment:
+      # QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY} uncomment this if you want to setup apikey (also you can setup it from the dashboard ui http://localhost:6333/dashboard)
+      QDRANT__SERVICE__SNAPSHOT_UPLOAD: "true"
+

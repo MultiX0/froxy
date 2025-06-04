@@ -1,48 +1,20 @@
-const natural = require('natural');
-const { TokenizerAr, NormalizerAr } = require('@nlpjs/lang-ar');
-const { removeStopwords } = require('stopword');
+const crypto = require('crypto');
 
-const tokenizerAr = new TokenizerAr();
-const normalizerAr = new NormalizerAr();
-const englishTokenizer = new natural.WordTokenizer();
 
-// Arabic stopwords
-const arabicStopwords = [
-  'في', 'من', 'على', 'و', 'أن', 'عن', 'إلى', 'ما', 'لا', 'هذا', 'هو', 'هي', 'كان', 'كل', 'لم', 'قد', 'ذلك', 'إن'
-];
-
-function isArabic(text) {
-  return /[\u0600-\u06FF]/.test(text);
-}
-
-function cleanTokens(tokens, lang = 'en') {
-  return tokens
-    .map(token => token.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')) // remove punctuation, lowercase
-    .filter(token => token.length > 1 && !/^\d+$/.test(token)) // remove digits and 1-char tokens
-    .filter(token => {
-      if (lang === 'ar') return !arabicStopwords.includes(token);
-      
-      // English filtered separately
-      return true; 
-    });
-}
-
-function smartTokenize(text) {
-  if (!text || typeof text !== 'string') return [];
-
-  if (isArabic(text)) {
-    const normalized = normalizerAr.normalize(text);
-    const tokens = tokenizerAr.tokenize(normalized);
-    return cleanTokens(tokens, 'ar');
-  } else {
-    const tokens = englishTokenizer.tokenize(text);
-    
-    // built-in English stopwords
-    const filtered = removeStopwords(tokens); 
-    return cleanTokens(filtered, 'en');
-  }
+// Generate UUID from URL
+function generateUUIDFromURL(url) {
+  const hash = crypto.createHash('sha256').update(url).digest();
+  
+  // Format as UUID v4 (8-4-4-4-12 format)
+  return [
+    hash.subarray(0, 4).toString('hex'),
+    hash.subarray(4, 6).toString('hex'),
+    hash.subarray(6, 8).toString('hex'),
+    hash.subarray(8, 10).toString('hex'),
+    hash.subarray(10, 16).toString('hex')
+  ].join('-');
 }
 
 module.exports = {
-  smartTokenize
-};
+  generateUUIDFromURL,
+}

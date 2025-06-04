@@ -9,7 +9,7 @@ type Link struct {
 type PageData struct {
 	URL             string              `json:"url"`
 	Title           string              `json:"title"`
-	MetaDescription string              `json:"meta_description"`
+	MetaDescription string              `json:"description"`
 	MetaKeywords    string              `json:"meta_keywords"`
 	Language        string              `json:"language"`
 	Canonical       string              `json:"canonical"`
@@ -23,5 +23,12 @@ type PageData struct {
 	ContentType     string              `json:"content_type"`
 	CrawlDate       time.Time           `json:"crawl_date"`
 	LastModified    time.Time           `json:"last_modified"`
-	OutboundLinks   []Link              `json:"outbound_links"`
+	OutboundLinks   []Link              `json:"out_links"`
+	InCommingLinks  []Link              `json:"in_links"`
+}
+
+type EmbeddingModel struct {
+	Embedding  []float32 `json:"embedding"`
+	Dims       int32     `json:"dims"`
+	ELAPSED_MS float32   `json:"elapsed_ms"`
 }

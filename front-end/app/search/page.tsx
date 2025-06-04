@@ -3,22 +3,8 @@
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import {
-  Search,
-  ArrowRight,
-  ArrowLeft,
-  ExternalLink,
-  Github,
-  ChevronRight,
-  Clock,
-  Users,
-  FileText,
-  Loader2,
-  Sparkles,
-} from "lucide-react"
+import { Search, ArrowRight, ArrowLeft, ExternalLink, Github, ChevronRight, FileText, Loader2 } from "lucide-react"
 import Link from "next/link"
-
-// TODO in the future make suggestions from the backend using levenshtein distance
 
 const searchSuggestions = [
   "JavaScript frameworks",
@@ -72,16 +58,7 @@ interface SearchResponse {
   metadata: {
     query: string
     totalResults: number
-    totalMatches: number
     searchTime: number
-    terms: string[]
-    queryTerms: string[]
-    options: {
-      limit: number
-      minScore: number
-      fuzzyMatch: boolean
-      fields: string[]
-    }
   }
 }
 
@@ -89,7 +66,6 @@ export default function SearchResults() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const query = searchParams.get("q") || ""
-  const fuzzyParam = searchParams.get("fuzzy")
   const [searchQuery, setSearchQuery] = useState(query)
   const [isFocused, setIsFocused] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
@@ -99,22 +75,20 @@ export default function SearchResults() {
   const [currentPage, setCurrentPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [fuzzySearch, setFuzzySearch] = useState(fuzzyParam === "true")
   const resultsPerPage = 10
 
-  // Add this at the beginning of the component to track header height
   const [headerHeight, setHeaderHeight] = useState(0)
   const headerRef = useRef<HTMLDivElement>(null)
 
   // Function to fetch search results from our backend API
-  const fetchSearchResults = async (searchQuery: string, fuzzy: boolean) => {
+  const fetchSearchResults = async (searchQuery: string) => {
     if (!searchQuery.trim()) return
 
     setLoading(true)
     setError(null)
 
     try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}&fuzzy=${fuzzy}`)
+      const response = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -137,9 +111,9 @@ export default function SearchResults() {
   useEffect(() => {
     if (query) {
       setSearchQuery(query)
-      fetchSearchResults(query, fuzzySearch)
+      fetchSearchResults(query)
     }
-  }, [query, fuzzySearch])
+  }, [query])
 
   useEffect(() => {
     if (searchQuery.length > 0) {
@@ -157,7 +131,7 @@ export default function SearchResults() {
     e.preventDefault()
     const finalQuery = selectedSuggestion >= 0 ? suggestions[selectedSuggestion] : searchQuery
     if (finalQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(finalQuery.trim())}&fuzzy=${fuzzySearch}`)
+      router.push(`/search?q=${encodeURIComponent(finalQuery.trim())}`)
       setSuggestions([])
       setIsFocused(false)
     }
@@ -173,7 +147,7 @@ export default function SearchResults() {
     } else if (e.key === "Enter" && selectedSuggestion >= 0) {
       e.preventDefault()
       setSearchQuery(suggestions[selectedSuggestion])
-      router.push(`/search?q=${encodeURIComponent(suggestions[selectedSuggestion].trim())}&fuzzy=${fuzzySearch}`)
+      router.push(`/search?q=${encodeURIComponent(suggestions[selectedSuggestion].trim())}`)
       setSuggestions([])
       setIsFocused(false)
     } else if (e.key === "Escape") {
@@ -186,16 +160,7 @@ export default function SearchResults() {
     setSearchQuery(suggestion)
     setSuggestions([])
     setIsFocused(false)
-    router.push(`/search?q=${encodeURIComponent(suggestion.trim())}&fuzzy=${fuzzySearch}`)
-  }
-
-  // Toggle fuzzy search
-  const toggleFuzzySearch = () => {
-    const newFuzzyValue = !fuzzySearch
-    setFuzzySearch(newFuzzyValue)
-    if (query) {
-      router.push(`/search?q=${encodeURIComponent(query)}&fuzzy=${newFuzzyValue}`)
-    }
+    router.push(`/search?q=${encodeURIComponent(suggestion.trim())}`)
   }
 
   // Pagination
@@ -209,7 +174,6 @@ export default function SearchResults() {
     }
   }
 
-  // Add this effect to measure header height
   useEffect(() => {
     if (headerRef.current) {
       setHeaderHeight(headerRef.current.offsetHeight)
@@ -217,7 +181,6 @@ export default function SearchResults() {
     }
   }, [])
 
-  // Check if suggestions should be shown
   const showSuggestions = suggestions.length > 0 && isFocused
 
   return (
@@ -271,7 +234,6 @@ export default function SearchResults() {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => {
-                      // Delay hiding to allow for suggestion clicks
                       setTimeout(() => {
                         setIsFocused(false)
                         setSuggestions([])
@@ -279,20 +241,8 @@ export default function SearchResults() {
                     }}
                     onKeyDown={handleKeyDown}
                     placeholder="Search anything..."
-                    className="w-full py-2.5 pl-10 pr-20 bg-transparent text-white placeholder-gray-400 text-sm focus:outline-none transition-colors duration-500 font-mono"
+                    className="w-full py-2.5 pl-10 pr-12 bg-transparent text-white placeholder-gray-400 text-sm focus:outline-none transition-colors duration-500 font-mono"
                   />
-
-                  {/* Fuzzy Search Toggle */}
-                  <div className={`absolute right-12 flex items-center cursor-pointer`} onClick={toggleFuzzySearch}>
-                    <div
-                      className={`w-7 h-3.5 rounded-full transition-colors duration-300 flex items-center ${fuzzySearch ? "bg-blue-500" : "bg-gray-700"}`}
-                    >
-                      <div
-                        className={`w-2.5 h-2.5 rounded-full bg-white transform transition-transform duration-300 ${fuzzySearch ? "translate-x-4" : "translate-x-0.5"}`}
-                      ></div>
-                    </div>
-                    <Sparkles className={`ml-1 w-3 h-3 ${fuzzySearch ? "text-blue-400" : "text-gray-500"}`} />
-                  </div>
 
                   <button
                     type="submit"
@@ -327,17 +277,15 @@ export default function SearchResults() {
         </div>
       </header>
 
-      {/* Suggestions Dropdown - Positioned absolutely with highest z-index */}
+      {/* Suggestions Dropdown */}
       {showSuggestions && (
         <div className="fixed inset-x-0 z-[9999]" style={{ top: `calc(var(--header-height) + 0.5rem)` }}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
             <div className="flex flex-col sm:flex-row items-center gap-4">
-              {/* Logo spacer */}
               <div className="text-2xl font-bold mr-0 sm:mr-6 opacity-0 pointer-events-none">
                 <span>FROXY</span>
               </div>
 
-              {/* Suggestions dropdown aligned with search bar */}
               <div className="flex-1 w-full relative">
                 <div className="bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl overflow-hidden">
                   {suggestions.map((suggestion, index) => (
@@ -345,7 +293,6 @@ export default function SearchResults() {
                       key={suggestion}
                       type="button"
                       onMouseDown={(e) => {
-                        // Use onMouseDown instead of onClick to prevent blur from firing first
                         e.preventDefault()
                         selectSuggestion(suggestion)
                       }}
@@ -362,7 +309,6 @@ export default function SearchResults() {
                 </div>
               </div>
 
-              {/* GitHub Link spacer */}
               <div className="hidden sm:flex items-center px-4 py-2 opacity-0 pointer-events-none">
                 <Github className="w-4 h-4 mr-2" />
                 SOURCE_CODE
@@ -390,12 +336,6 @@ export default function SearchResults() {
                     {Math.min(currentPage * resultsPerPage, results.length)} of {results.length})
                   </span>
                 )}
-                {fuzzySearch && (
-                  <span className="ml-2 text-purple-400">
-                    <Sparkles className="inline w-3 h-3 mr-1" />
-                    Fuzzy search enabled
-                  </span>
-                )}
               </p>
             </div>
           )}
@@ -413,7 +353,7 @@ export default function SearchResults() {
             <div className="text-center py-12">
               <p className="text-red-400 text-lg font-mono">{error}</p>
               <button
-                onClick={() => fetchSearchResults(query, fuzzySearch)}
+                onClick={() => fetchSearchResults(query)}
                 className="mt-4 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors duration-200 font-mono"
               >
                 Try Again
@@ -465,10 +405,6 @@ export default function SearchResults() {
                             <FileText className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
                             <span>Score: {result.score.toFixed(1)}</span>
                           </div>
-                          <div className="flex items-center">
-                            <Users className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
-                            <span>Coverage: {result.termCoverage}%</span>
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -478,15 +414,6 @@ export default function SearchResults() {
                     <div className="text-center py-12">
                       <p className="text-gray-400 text-lg font-mono">No results found for "{query}"</p>
                       <p className="text-gray-500 mt-2 font-mono">Try different keywords or check your spelling</p>
-                      {!fuzzySearch && (
-                        <button
-                          onClick={toggleFuzzySearch}
-                          className="mt-4 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors duration-200 font-mono flex items-center mx-auto"
-                        >
-                          <Sparkles className="w-4 h-4 mr-2" />
-                          Try with fuzzy search
-                        </button>
-                      )}
                     </div>
                   )}
             </div>
@@ -510,7 +437,6 @@ export default function SearchResults() {
 
                 {[...Array(totalPages)].map((_, i) => {
                   const pageNum = i + 1
-                  // Show current page, first, last, and pages around current
                   if (
                     pageNum === 1 ||
                     pageNum === totalPages ||

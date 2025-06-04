@@ -1,60 +1,19 @@
--- Creating pages table
 CREATE TABLE IF NOT EXISTS pages (
-    id SERIAL PRIMARY KEY,
-    url TEXT NOT NULL,
-    title TEXT,
-    meta_description TEXT,
-    meta_keywords TEXT,
-    language TEXT,
-    canonical TEXT,
-    content TEXT,
-    word_count INTEGER DEFAULT 0,
-    status_code INTEGER,
-    response_time INTEGER,
-    content_type TEXT,
-    last_modified TIMESTAMP WITHOUT TIME ZONE,
-    crawl_date TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pages_url_key UNIQUE (url)
-) TABLESPACE pg_default;
+		id SERIAL PRIMARY KEY,
+		qdrant_id UUID NOT NULL UNIQUE,
+		url TEXT NOT NULL UNIQUE,
+		title TEXT,
+		status_code INTEGER,
+		crawl_date TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);
 
--- Creating page_headings table
-CREATE TABLE IF NOT EXISTS page_headings (
-    id SERIAL NOT NULL,
-    page_id INTEGER,
-    heading_type CHARACTER VARYING(10) NOT NULL,
-    text TEXT NOT NULL,
-    position INTEGER DEFAULT 1,
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT page_headings_pkey PRIMARY KEY (id),
-    CONSTRAINT page_headings_page_id_fkey FOREIGN KEY (page_id) REFERENCES pages (id) ON DELETE CASCADE
-) TABLESPACE pg_default;
 
--- Creating links table
 CREATE TABLE IF NOT EXISTS links (
-    id SERIAL PRIMARY KEY,
-    from_page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
-    to_url TEXT NOT NULL,
-    anchor_text TEXT,
-    link_type CHARACTER VARYING(20) DEFAULT 'external',
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
-) TABLESPACE pg_default;
-
--- Creating terms table
-CREATE TABLE IF NOT EXISTS terms (
-    id SERIAL PRIMARY KEY,
-    term TEXT,
-    CONSTRAINT terms_term_key UNIQUE (term)
-) TABLESPACE pg_default;
-
-CREATE TABLE IF NOT EXISTS term_page_index (
-    id SERIAL PRIMARY KEY,
-    term_id INTEGER NOT NULL REFERENCES terms(id) ON DELETE CASCADE,
-    page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
-    term_frequency INTEGER NOT NULL DEFAULT 0,
-    tf_idf DECIMAL(10,6) NOT NULL DEFAULT 0,
-    field VARCHAR(50) NOT NULL DEFAULT 'content',
-    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT term_page_index_unique UNIQUE (term_id, page_id, field)
-);
+		id SERIAL PRIMARY KEY,
+		from_page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
+		to_url TEXT NOT NULL,
+		anchor_text TEXT,
+		link_type CHARACTER VARYING(20) DEFAULT 'external',
+		created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+	);
