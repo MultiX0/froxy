@@ -3,6 +3,8 @@ services:
     image: postgres:16
     container_name: froxy_pgsql
     restart: unless-stopped
+    networks:
+      - froxy-network
     user: postgres
     env_file:
       - .env
@@ -52,3 +54,7 @@ services:
     env_file:
       - .env
     entrypoint: ["bash", "/backup.sh"]
+
+networks:
+  froxy-network:
+    external: true
