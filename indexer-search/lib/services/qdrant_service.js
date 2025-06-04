@@ -1,7 +1,13 @@
 const { QdrantClient } = require("@qdrant/js-client-rest");
 
-const QDRANT_HOST = process.env.QDRANT_HOST || "http://localhost:6333";
-const qdrant = new QdrantClient({ url: QDRANT_HOST });
+const qdrantUrl = 'http://qdrant:6333'
+const QDRANT_API_KEY = process.env.QDRANT_API_KEY;
+
+const qdrant = new QdrantClient({
+  url: qdrantUrl,
+  apiKey: QDRANT_API_KEY,
+  checkCompatibility: false,
+});
 
 const COLLECTION_NAME = "page_content_embeddings";
 const VECTOR_SIZE = 384;

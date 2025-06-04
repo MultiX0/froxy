@@ -1,6 +1,6 @@
 const dotenv = require("dotenv");
 const express = require("express");
-const { calculateTfIdfInBatches } = require("./lib/services/indexer");
+const { indexPagesToQdrant } = require("./lib/services/indexer");
 const { searchAPI } = require("./lib/services/search");
 
 dotenv.config();
@@ -70,6 +70,8 @@ app.get('/health', async (req, res) => {
 
 app.use(apiKeyChecker);
 
+let indexingStatus = {};
+
 app.get("/indexing-tracked", async (req, res) => {
   try {
     if (indexingStatus.isRunning) {
@@ -89,7 +91,7 @@ app.get("/indexing-tracked", async (req, res) => {
     };
 
     // Start indexing process
-    calculateTfIdfInBatches()
+    indexPagesToQdrant()
       .then(() => {
         indexingStatus.isRunning = false;
         indexingStatus.progress = 100;
