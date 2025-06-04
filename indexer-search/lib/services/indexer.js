@@ -83,61 +83,8 @@ async function ensureQdrantIdsForBatch(pages) {
   }
 }
 
-// Function to get page content from the database
-async function getPageContent(pageId) {
-  // Since content is now stored in Qdrant, we need to fetch it from there
-  // or if you have content stored elsewhere, adjust this query
-  const result = await query(`
-    SELECT content, meta_description 
-    FROM page_content 
-    WHERE page_id = $1
-  `, [pageId]);
-  
-  if (result.rows.length > 0) {
-    return {
-      content: result.rows[0].content || '',
-      meta_description: result.rows[0].meta_description || ''
-    };
-  }
-  
-  return { content: '', meta_description: '' };
-}
 
-async function processEmbeddingsForBatch(pages) {
-  const embeddings = [];
 
-  for (const page of pages) {
-    try {
-      // Get content for this page (adjust based on where you store content)
-      const { content, meta_description } = await getPageContent(page.id);
-      
-      const textToEmbed = `${page.title || ""} ${meta_description || ""} ${content || ""}`.trim();
-
-      if (textToEmbed) {
-        const embedding = await embed(textToEmbed);
-        
-        embeddings.push({
-          id: page.qdrant_id, // This will now always be set
-          vector: embedding,
-          payload: {
-            page_id: page.id,
-            url: page.url,
-            title: page.title || '',
-            content: content || '',
-            description: meta_description || '',
-            status: page.status_code,
-            out_links: page.out_links,
-            in_links: page.in_links,
-          },
-        });
-      }
-    } catch (error) {
-      console.error(`Failed to generate embedding for page ${page.id}:`, error);
-    }
-  }
-
-  return embeddings;
-}
 
 async function indexPagesToQdrant() {
   console.log("Starting Qdrant indexing from PostgreSQL...");
@@ -160,15 +107,7 @@ async function indexPagesToQdrant() {
     for (let offset = chunkStart; offset < chunkEnd; offset += BATCH_SIZE * PARALLEL_BATCHES) {
       const currentBatchPromises = [];
 
-      // Create parallel batch promises
-      for (let i = 0; i < PARALLEL_BATCHES && offset + i * BATCH_SIZE < chunkEnd; i++) {
-        const batchOffset = offset + i * BATCH_SIZE;
-        const batchLimit = Math.min(BATCH_SIZE, chunkEnd - batchOffset);
-
-        currentBatchPromises.push(
-          getPagesBatch(batchOffset, batchLimit).then(processEmbeddingsForBatch)
-        );
-      }
+     
 
       // Wait for all batches to complete
       const embeddingResults = await Promise.all(currentBatchPromises);

@@ -70,56 +70,6 @@ app.get('/health', async (req, res) => {
 
 app.use(apiKeyChecker);
 
-let indexingStatus = {};
-
-app.get("/indexing-tracked", async (req, res) => {
-  try {
-    if (indexingStatus.isRunning) {
-      return res.status(409).json({
-        error: "Indexing is already in progress",
-        status: indexingStatus
-      });
-    }
-
-    // Reset status
-    indexingStatus = {
-      isRunning: true,
-      progress: 0,
-      message: 'Starting TF-IDF indexing...',
-      startTime: new Date(),
-      error: null
-    };
-
-    // Start indexing process
-    indexPagesToQdrant()
-      .then(() => {
-        indexingStatus.isRunning = false;
-        indexingStatus.progress = 100;
-        indexingStatus.message = 'Indexing completed successfully';
-        console.log('TF-IDF indexing completed');
-      })
-      .catch((error) => {
-        indexingStatus.isRunning = false;
-        indexingStatus.error = error.message;
-        indexingStatus.message = 'Indexing failed';
-        console.error('TF-IDF indexing failed:', error);
-      });
-
-    res.status(202).json({
-      message: "TF-IDF indexing started",
-      status: indexingStatus
-    });
-  } catch (error) {
-    indexingStatus.isRunning = false;
-    indexingStatus.error = error.message;
-    console.error('Error starting indexing:', error);
-    res.status(500).json({
-      error: "Failed to start indexing process",
-      details: error.message
-    });
-  }
-});
-
 app.get("/results-count", async (req, res) => {
   const pg = require('./lib/services/db_service');
   const resultCountQuery = 'SELECT COUNT(*) FROM pages;';
@@ -128,18 +78,6 @@ app.get("/results-count", async (req, res) => {
   return res.json({count})
   
 });
-
-
-app.get("/indexing-status", (req, res) => {
-  res.json({
-    status: indexingStatus,
-    runtime: indexingStatus.startTime ? 
-      Math.floor((new Date() - indexingStatus.startTime) / 1000) + ' seconds' : 
-      null
-  });
-});
-
-
 
 app.get('/search', async(req,res) => searchAPI(req,res));
 

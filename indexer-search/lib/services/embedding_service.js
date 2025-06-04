@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const EMBEDDING_SERVICE_URL = process.env.EMBEDDING_SERVICE_URL || 'http://embedding-service:5050';
+const EMBEDDING_SERVICE_URL = process.env.EMBEDDING_SERVICE_URL || 'http://embedding-service:5050/embed';
 async function embed(text) {
     try {
         const body = { text };
