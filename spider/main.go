@@ -34,6 +34,12 @@ func main() {
 
 	var crawlableSites = []string{
 		"https://myanimelist.net/manga/121496/Solo_Leveling",
+		"https://en.wikipedia.org/wiki/Main_Page",
+		"https://animelek.vip/",
+		"https://lekmanga.net/",
+		"https://azoramoon.com/",
+		"https://kitchen.sayidaty.net/%D9%88%D8%B5%D9%81%D8%A7%D8%AA-%D8%B7%D8%A8%D8%AE",
+		"https://cookpad.com/jo/search/%D9%88%D8%B5%D9%81%D8%A7%D8%AA%20%D8%B7%D8%A8%D8%AE",
 	}
 
 	crawler.Start(

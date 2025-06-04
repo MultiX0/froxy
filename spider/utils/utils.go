@@ -65,31 +65,46 @@ func Embed(text string) (*models.EmbeddingModel, error) {
 	requestBody := map[string]string{"text": text}
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {
+		fmt.Println("===================================================")
+		fmt.Println(err)
+		fmt.Println("===================================================")
+
 		return nil, fmt.Errorf("failed to marshal request body: %v", err)
 	}
 
 	request, err := http.NewRequestWithContext(context.TODO(), "POST", embeddingServerUrl, bytes.NewBuffer(jsonData))
 	if err != nil {
+		fmt.Println("===================================================")
 		fmt.Println(err)
+		fmt.Println("===================================================")
 		return nil, err
 	}
 
 	request.Header.Set("Accept", "application/json")
 	resp, err := httpClient.Do(request)
 	if err != nil {
+		fmt.Println("===================================================")
 		fmt.Println(err)
+		fmt.Println("===================================================")
 		return nil, err
 	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		fmt.Println("===================================================")
 		fmt.Printf("Skipped, status: %d", resp.StatusCode)
+		fmt.Println("===================================================")
+
 		return nil, fmt.Errorf("non-200 status code: %d", resp.StatusCode)
 	}
 
 	var embedding models.EmbeddingModel
 	err = json.NewDecoder(resp.Body).Decode(&embedding)
 	if resp.StatusCode != http.StatusOK {
+		fmt.Println("===================================================")
+		fmt.Println(err)
+		fmt.Println("===================================================")
+
 		fmt.Printf("Decoding Issue, %s", err)
 		return nil, err
 	}
