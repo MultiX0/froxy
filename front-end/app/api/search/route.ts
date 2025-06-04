@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Removed fuzzy parameter from the API call
-    const response = await fetch(`${apiUrl}/search?q=${encodeURIComponent(query)}`, {
+    const response = await fetch(`${apiUrl}/search?q=${encodeURIComponent(query)}&limit=50`, {
       headers: {
         "x-api-key": apiKey,
       },

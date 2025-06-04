@@ -329,7 +329,7 @@ export default function SearchResults() {
               <p>
                 Found {metadata.totalResults} results for{" "}
                 <span className="text-blue-400 font-medium">"{metadata.query}"</span>
-                <span className="ml-2 text-gray-500">({metadata.searchTime}ms)</span>
+                <span className="ml-2 text-gray-500">({(metadata.searchTime / 1000)}s)</span>
                 {results.length > resultsPerPage && (
                   <span className="ml-2">
                     (Showing {(currentPage - 1) * resultsPerPage + 1}-
@@ -386,18 +386,6 @@ export default function SearchResults() {
                           {result.url}
                         </p>
                         <p className="text-gray-300 text-sm sm:text-base mt-2">{result.description}</p>
-
-                        {/* Matched Terms */}
-                        <div className="flex flex-wrap gap-2 mt-3">
-                          {result.matchedTerms.map((term: string) => (
-                            <span
-                              key={term}
-                              className="text-xs px-2 py-1 bg-blue-500/10 text-blue-300 rounded-full border border-blue-500/20 font-mono"
-                            >
-                              {term}
-                            </span>
-                          ))}
-                        </div>
 
                         {/* Search Metadata */}
                         <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4 text-xs text-gray-400 font-mono">
