@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   qdrant:
     image: qdrant/qdrant:latest
@@ -11,7 +13,14 @@ services:
     volumes:
       - ./qdrant_storage:/qdrant/storage
     restart: unless-stopped
+    networks:
+      - froxy-network
     environment:
-      # QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY} uncomment this if you want to setup apikey (also you can setup it from the dashboard ui http://localhost:6333/dashboard)
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
       QDRANT__SERVICE__SNAPSHOT_UPLOAD: "true"
+
+networks:
+  froxy-network:
+    external: true
+
 
