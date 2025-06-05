@@ -22,6 +22,7 @@ async function searchAPI(req, res) {
         title: res.payload.title,
         description: res.payload.description,
         url: res.payload.url,
+        favicon: res.payload.favicon,
         score: (res.score * results.length * 100),
       };
     });
