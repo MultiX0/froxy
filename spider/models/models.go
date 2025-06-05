@@ -25,6 +25,7 @@ type PageData struct {
 	LastModified    time.Time           `json:"last_modified"`
 	OutboundLinks   []Link              `json:"out_links"`
 	InCommingLinks  []Link              `json:"in_links"`
+	Favicon         string              `json:"favicon"`
 }
 
 type EmbeddingModel struct {

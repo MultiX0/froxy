@@ -20,6 +20,12 @@ func UpsertPageToQdrant(client *qdrant.Client, pageData models.PageData) error {
 	// Generate deterministic ID from URL
 	pointID := utils.GenerateUUIDFromURL(pageData.URL)
 	fmt.Println(pointID)
+	var qdrantValues []*qdrant.Value
+	for _, alt := range pageData.ImageAlt {
+		qdrantValues = append(qdrantValues, &qdrant.Value{
+			Kind: &qdrant.Value_StringValue{StringValue: alt},
+		})
+	}
 
 	// Create the point
 	point := &qdrant.PointStruct{
@@ -69,6 +75,16 @@ func UpsertPageToQdrant(client *qdrant.Client, pageData models.PageData) error {
 			"in_links": {
 				Kind: &qdrant.Value_IntegerValue{
 					IntegerValue: 0,
+				},
+			},
+			"favicon": {
+				Kind: &qdrant.Value_StringValue{
+					StringValue: pageData.Favicon,
+				},
+			},
+			"image_alts": {
+				Kind: &qdrant.Value_ListValue{
+					ListValue: &qdrant.ListValue{Values: qdrantValues},
 				},
 			},
 		},
