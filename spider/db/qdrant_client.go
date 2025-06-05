@@ -59,7 +59,7 @@ func CreatePageEmbeddingsCollection() error {
 	err = Client.CreateCollection(context.Background(), &qdrant.CreateCollection{
 		CollectionName: "page_content_embeddings",
 		VectorsConfig: qdrant.NewVectorsConfig(&qdrant.VectorParams{
-			Size:     384,
+			Size:     768,
 			Distance: qdrant.Distance_Cosine,
 		}),
 	})
