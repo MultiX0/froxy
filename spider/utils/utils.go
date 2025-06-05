@@ -52,11 +52,11 @@ func Embed(text string) (*models.EmbeddingModel, error) {
 
 	// Create HTTP client
 	httpClient := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: time.Minute,
 		Transport: &http.Transport{
 			MaxIdleConns:        100,
 			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     10 * time.Second,
+			IdleConnTimeout:     time.Minute,
 			DisableKeepAlives:   false,
 		},
 	}
