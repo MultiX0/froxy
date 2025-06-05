@@ -10,7 +10,7 @@ const qdrant = new QdrantClient({
 });
 
 const COLLECTION_NAME = "page_content_embeddings";
-const VECTOR_SIZE = 768;
+const VECTOR_SIZE = 384;
 
 async function qdrantInit() {
   try {
