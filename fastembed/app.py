@@ -18,13 +18,15 @@ app = FastAPI(
 # Load the model (load once)
 try:
     model = TextEmbedding(
-        model_name="sentence-transformers/all-MiniLM-L6-v2", # you can use any other models you want i use this one because it is so fast and lightwieght 
+        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", # you can use any other models you want i use this one because it is so fast and lightwieght 
         cache_dir="./models"
     )
     logger.info("Model loaded successfully")
 except Exception as e:
     logger.error(f"Failed to load model: {e}")
     raise
+
+print("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
 
 # Request schema
 class EmbedRequest(BaseModel):
@@ -42,7 +44,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "model": "sentence-transformers/all-MiniLM-L6-v2"}
+    return {"status": "healthy", "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"}
 
 @app.post("/embed", response_model=EmbedResponse)
 async def embed_text(request: EmbedRequest):
