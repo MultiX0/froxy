@@ -18,7 +18,7 @@ app = FastAPI(
 # Load the model (load once)
 try:
     model = TextEmbedding(
-        model_name="intfloat/multilingual-e5-large", # you can use any other models you want i use this one because it is so fast and lightwieght 
+        model_name="sentence-transformers/paraphrase-multilingual-mpnet-base-v2", # you can use any other models you want i use this one because it is so fast and lightwieght 
         cache_dir="./models"
     )
     logger.info("Model loaded successfully")
@@ -43,7 +43,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "model": "intfloat/multilingual-e5-large"}
+    return {"status": "healthy", "model": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"}
 
 @app.post("/embed", response_model=EmbedResponse)
 async def embed_text(request: EmbedRequest):
