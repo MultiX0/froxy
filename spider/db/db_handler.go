@@ -12,7 +12,6 @@ import (
 	"github.com/froxy/models"
 	"github.com/froxy/utils"
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
 	"github.com/qdrant/go-client/qdrant"
 )
 
@@ -231,8 +230,8 @@ func (p *PostgresHandler) UpsertPageData(pageData models.PageData) error {
 		// Upsert page data
 		upsertPageQuery := `
 			INSERT INTO pages (
-				qdrant_id, url, title, status_code, crawl_date, updated_at
-			) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+				qdrant_id, url, title, status_code, crawl_date, updated_at, favicon
+			) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
 			ON CONFLICT (url) DO UPDATE SET
 				title = EXCLUDED.title,
 				status_code = EXCLUDED.status_code,
@@ -246,6 +245,7 @@ func (p *PostgresHandler) UpsertPageData(pageData models.PageData) error {
 			pageData.Title,
 			pageData.StatusCode,
 			pageData.CrawlDate,
+			pageData.Favicon,
 		).Scan(&pageID)
 
 		if err != nil {
