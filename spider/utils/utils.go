@@ -62,6 +62,9 @@ func Embed(text string) (*models.EmbeddingModel, error) {
 	}
 
 	embeddingServerUrl := os.Getenv("EMBEDDING_HOST")
+	if len(embeddingServerUrl) == 0 {
+		embeddingServerUrl = "http://localhost:5050/embed"
+	}
 	requestBody := map[string]string{"text": text}
 	jsonData, err := json.Marshal(requestBody)
 	if err != nil {

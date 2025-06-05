@@ -2,6 +2,7 @@ package functions
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
@@ -22,6 +23,29 @@ import (
 	"golang.org/x/net/html"
 )
 
+// Sitemap structures for XML parsing
+type Sitemap struct {
+	XMLName xml.Name     `xml:"urlset"`
+	URLs    []SitemapURL `xml:"url"`
+}
+
+type SitemapIndex struct {
+	XMLName  xml.Name           `xml:"sitemapindex"`
+	Sitemaps []SitemapReference `xml:"sitemap"`
+}
+
+type SitemapURL struct {
+	Loc        string `xml:"loc"`
+	LastMod    string `xml:"lastmod"`
+	ChangeFreq string `xml:"changefreq"`
+	Priority   string `xml:"priority"`
+}
+
+type SitemapReference struct {
+	Loc     string `xml:"loc"`
+	LastMod string `xml:"lastmod"`
+}
+
 type Crawler struct {
 	BaseDomain   string
 	LinksQueue   *[]models.Link
@@ -41,6 +65,9 @@ var (
 	timesleep    = 2 * time.Second
 	userAgent    = "FroxyBot/1.0"
 	pagesCrawled = 0
+	// Because we use semantic search now, we need a proper amount of content to embedded for a good results
+	// so for this i added the minimum content length to avoid the pages that are empty or with less content so no meaning with embedding this pages it will just broke the search
+	minContentLength = 1500 // Minimum content length requirement
 )
 
 // NewCrawler creates a new crawler instance with proper initialization
@@ -51,14 +78,14 @@ func NewCrawler() *Crawler {
 
 	linksQueue := make([]models.Link, 0)
 
-	// Create HTTP client with better settings
+	// HTTP client with better settings
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			MaxIdleConns:        100,
 			MaxIdleConnsPerHost: 10,
 			IdleConnTimeout:     30 * time.Second,
-			DisableKeepAlives:   false, // Enable keep-alives for better performance
+			DisableKeepAlives:   false,
 		},
 	}
 
@@ -82,9 +109,8 @@ func NewCrawler() *Crawler {
 
 	return crawler
 }
-func (c *Crawler) Start(workerCount int, seedUrls ...string) {
-	// Validate crawler state
 
+func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 	if c == nil {
 		log.Fatal("Crawler instance is nil")
 		return
@@ -105,11 +131,18 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 		c.BaseDomain = parsedURL.Host
 		log.Printf("Set BaseDomain to: %s", c.BaseDomain)
 		appendLog(fmt.Sprintf("Set BaseDomain to: %s", c.BaseDomain))
-
 	}
 
-	for _, url := range seedUrls {
-		c.safeEnqueue(models.Link{URL: url})
+	// First, try to crawl from sitemap
+	baseURL := fmt.Sprintf("https://%s", c.BaseDomain)
+	if err := c.crawlFromSitemap(baseURL); err != nil {
+		log.Printf("Failed to crawl from sitemap: %v, falling back to seed URLs", err)
+		appendLog(fmt.Sprintf("Failed to crawl from sitemap: %v, falling back to seed URLs", err))
+
+		// Fall back to seed URLs if sitemap fails
+		for _, url := range seedUrls {
+			c.safeEnqueue(models.Link{URL: url})
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -131,8 +164,7 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 				select {
 				case <-c.Ctx.Done():
 					log.Printf("Worker %d: Shutdown signal received", id)
-					appendLog("Worker %d: Shutdown signal received")
-
+					appendLog(fmt.Sprintf("Worker %d: Shutdown signal received", id))
 					return
 				default:
 				}
@@ -176,6 +208,63 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 	log.Printf("All workers finished. Total pages crawled: %d", pagesCrawled)
 }
 
+// crawlFromSitemap attempts to populate the queue from sitemap.xml
+func (c *Crawler) crawlFromSitemap(baseURL string) error {
+	sitemapURLs := []string{
+		baseURL + "/sitemap.xml",
+		baseURL + "/sitemap_index.xml",
+		baseURL + "/sitemaps.xml",
+	}
+
+	for _, sitemapURL := range sitemapURLs {
+		log.Printf("Trying to fetch sitemap from: %s", sitemapURL)
+
+		resp, err := c.httpClient.Get(sitemapURL)
+		if err != nil {
+			log.Printf("Failed to fetch sitemap from %s: %v", sitemapURL, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("Sitemap not found at %s, status: %d", sitemapURL, resp.StatusCode)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Printf("Failed to read sitemap body from %s: %v", sitemapURL, err)
+			continue
+		}
+
+		// Try to parse as regular sitemap first
+		var sitemap Sitemap
+		if err := xml.Unmarshal(body, &sitemap); err == nil && len(sitemap.URLs) > 0 {
+			log.Printf("Found sitemap with %d URLs", len(sitemap.URLs))
+			for _, url := range sitemap.URLs {
+				c.safeEnqueue(models.Link{URL: url.Loc})
+			}
+			return nil
+		}
+
+		// Try to parse as sitemap index
+		var sitemapIndex SitemapIndex
+		if err := xml.Unmarshal(body, &sitemapIndex); err == nil && len(sitemapIndex.Sitemaps) > 0 {
+			log.Printf("Found sitemap index with %d sitemaps", len(sitemapIndex.Sitemaps))
+			for _, sitemapRef := range sitemapIndex.Sitemaps {
+				if err := c.crawlFromSitemap(sitemapRef.Loc); err != nil {
+					log.Printf("Failed to crawl nested sitemap %s: %v", sitemapRef.Loc, err)
+				}
+			}
+			return nil
+		}
+
+		log.Printf("Failed to parse sitemap from %s", sitemapURL)
+	}
+
+	return fmt.Errorf("no valid sitemap found")
+}
+
 func (c *Crawler) monitorShutdown() {
 	<-c.shutdownChan
 	log.Println("Shutdown signal received. Initiating graceful shutdown...")
@@ -190,7 +279,6 @@ func (c *Crawler) monitorShutdown() {
 }
 
 func (c *Crawler) safeDequeue() (models.Link, bool) {
-	// Add nil checks for safety
 	if c == nil || c.Mu == nil || c.LinksQueue == nil || c.QueuedUrls == nil {
 		log.Printf("ERROR: Crawler or its components are nil in safeDequeue")
 		return models.Link{}, false
@@ -217,25 +305,8 @@ func (c *Crawler) safeDequeue() (models.Link, bool) {
 }
 
 func (c *Crawler) safeEnqueue(link models.Link) {
-	// Add comprehensive nil checks
-	if c == nil {
-		log.Printf("ERROR: Crawler instance is nil")
-		return
-	}
-	if c.Mu == nil {
-		log.Printf("ERROR: Crawler mutex is nil")
-		return
-	}
-	if c.LinksQueue == nil {
-		log.Printf("ERROR: Crawler LinksQueue is nil")
-		return
-	}
-	if c.QueuedUrls == nil {
-		log.Printf("ERROR: Crawler QueuedUrls is nil")
-		return
-	}
-	if c.VisitedUrls == nil {
-		log.Printf("ERROR: Crawler VisitedUrls is nil")
+	if c == nil || c.Mu == nil || c.LinksQueue == nil || c.QueuedUrls == nil || c.VisitedUrls == nil {
+		log.Printf("ERROR: Crawler components are nil")
 		return
 	}
 
@@ -265,7 +336,6 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 	if _, visited := c.VisitedUrls[websiteUrl]; visited {
 		log.Printf("%s already visited, skipping", websiteUrl)
 		appendLog(fmt.Sprintf("%s already visited, skipping", websiteUrl))
-
 		return nil
 	}
 
@@ -288,7 +358,6 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 	if err := c.CheckingRobotsRules((protocol + domain), targetPath); err != nil {
 		log.Printf("Robots.txt blocked %s: %v", websiteUrl, err)
 		appendLog(fmt.Sprintf("Robots.txt blocked %s: %v", websiteUrl, err))
-
 		return fmt.Errorf("robots.txt blocked: %w", err)
 	}
 
@@ -298,8 +367,6 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 
 	startTime := time.Now()
 
-	client := c.httpClient
-
 	request, err := http.NewRequestWithContext(ctx, "GET", websiteUrl, nil)
 	if err != nil {
 		log.Printf("Failed to create request for %s: %v", websiteUrl, err)
@@ -308,9 +375,9 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 
 	request.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	request.Header.Set("User-Agent", userAgent)
-	request.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	// request.Header.Set("Accept-Language", "en-US,en;q=0.5")
 
-	resp, err := client.Do(request)
+	resp, err := c.httpClient.Do(request)
 	responseTime := time.Since(startTime)
 
 	if err != nil {
@@ -345,6 +412,12 @@ func (c *Crawler) CrawlPage(websiteUrl string) error {
 		return fmt.Errorf("failed to extract page data: %w", err)
 	}
 
+	// Check content length requirement
+	if len(pageData.MainContent) < minContentLength {
+		log.Printf("Skipping %s: content too short (%d characters, minimum %d)", websiteUrl, len(pageData.MainContent), minContentLength)
+		return nil
+	}
+
 	// Store data with retry logic and exponential backoff
 	if err := c.storePageDataWithRetry(pageData, 3); err != nil {
 		log.Printf("Failed to store page data after retries for %s: %v", websiteUrl, err)
@@ -363,14 +436,12 @@ func (c *Crawler) storePageDataWithRetry(pageData *models.PageData, maxRetries i
 
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Check if context is cancelled before each attempt
 		select {
 		case <-c.Ctx.Done():
 			return fmt.Errorf("operation cancelled")
 		default:
 		}
 
-		// Check database health before attempting to store
 		if err := db.GetPostgresHandler().HealthCheck(); err != nil {
 			log.Printf("Database health check failed before storing %s (attempt %d): %v", pageData.URL, attempt, err)
 			lastErr = err
@@ -448,7 +519,11 @@ func (c *Crawler) extractHTMLData(n *html.Node, pageData *models.PageData, domai
 	if n.Type == html.ElementNode {
 		switch n.Data {
 		case "title":
-			pageData.Title = c.extractTextContent(n)
+			// Extract the actual page title from the <title> tag
+			titleText := c.extractTextContent(n)
+			if titleText != "" && pageData.Title == "" { // Only set if not already set
+				pageData.Title = titleText
+			}
 
 		case "meta":
 			c.extractMetaData(n, pageData)
@@ -468,8 +543,18 @@ func (c *Crawler) extractHTMLData(n *html.Node, pageData *models.PageData, domai
 			c.extractLinkData(n, pageData, domain, protocol)
 
 		case "link":
-			if rel := c.getAttributeValue(n, "rel"); rel == "canonical" {
-				pageData.Canonical = c.getAttributeValue(n, "href")
+			rel := c.getAttributeValue(n, "rel")
+			href := c.getAttributeValue(n, "href")
+
+			if rel == "canonical" {
+				pageData.Canonical = href
+			} else if rel == "icon" || rel == "shortcut icon" || strings.Contains(rel, "icon") {
+				// Extract favicon URL
+				if href != "" && pageData.Favicon == "" { // Only set if not already set
+					faviconURL := c.constructFullURL(href, domain, protocol)
+					pageData.Favicon = faviconURL
+					log.Printf("Found favicon for %s: %s", pageData.URL, faviconURL)
+				}
 			}
 		}
 	}
@@ -500,6 +585,11 @@ func (c *Crawler) extractMetaData(n *html.Node, pageData *models.PageData) {
 		pageData.MetaKeywords = content
 	case name == "language" || property == "og:locale":
 		pageData.Language = content
+	case property == "og:title":
+		// Use og:title as fallback if no title tag found
+		if pageData.Title == "" {
+			pageData.Title = content
+		}
 	}
 }
 
@@ -543,14 +633,18 @@ func (c *Crawler) extractLinkData(linkNode *html.Node, pageData *models.PageData
 		return
 	}
 
+	// Store the link with its text (NOT as the page title)
 	pageData.OutboundLinks = append(pageData.OutboundLinks, models.Link{
 		Text: linkText,
 		URL:  cleanURL,
 	})
 
-	if _, err := url.Parse(cleanURL); err == nil {
-		link := models.Link{Text: linkText, URL: cleanURL}
-		c.safeEnqueue(link)
+	// Only enqueue links from the same domain
+	if parsedURL, err := url.Parse(cleanURL); err == nil {
+		if parsedURL.Host == domain || parsedURL.Host == c.BaseDomain {
+			link := models.Link{Text: linkText, URL: cleanURL}
+			c.safeEnqueue(link)
+		}
 	}
 }
 
@@ -615,6 +709,7 @@ func (c *Crawler) cleanContent(content string) string {
 
 	return strings.TrimSpace(content)
 }
+
 func (c *Crawler) CheckingRobotsRules(domain string, targetPath string) error {
 	robotsCacheMu.RLock()
 	robotsData, exists := robotsCache[domain]
