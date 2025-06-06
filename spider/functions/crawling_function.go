@@ -60,6 +60,7 @@ type Crawler struct {
 
 var robotsCache = make(map[string]*robotstxt.RobotsData)
 var robotsCacheMu sync.RWMutex
+var transport = ProxyTransport()
 
 var (
 	timesleep    = 2 * time.Second
@@ -79,14 +80,10 @@ func NewCrawler() *Crawler {
 	linksQueue := make([]models.Link, 0)
 
 	// HTTP client with better settings
+
 	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     30 * time.Second,
-			DisableKeepAlives:   false,
-		},
+		Timeout:   30 * time.Second,
+		Transport: transport,
 	}
 
 	crawler := &Crawler{
@@ -331,6 +328,7 @@ func (c *Crawler) safeEnqueue(link models.Link) {
 func (c *Crawler) CrawlPage(websiteUrl string) error {
 	log.Printf("Crawling: %s", websiteUrl)
 	pagesCrawled++
+	c.httpClient.Transport = ProxyTransport()
 	defer c.addToSeen(websiteUrl)
 
 	if _, visited := c.VisitedUrls[websiteUrl]; visited {
