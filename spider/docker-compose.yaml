@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  go-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: go-application
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - GO_ENV=production
+      - PORT=8080
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - DB_SSLMODE=${DB_SSLMODE}
+      - QDRANT_HOST=${QDRANT_HOST}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
+      - EMBEDDING_HOST=${EMBEDDING_HOST}
+    volumes:
+      # Optional: mount config files or data directories
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - froxy-network
+
+networks:
+  froxy-network:
+    external: true
