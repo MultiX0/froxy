@@ -17,6 +17,7 @@ services:
       - QDRANT_HOST=${QDRANT_HOST}
       - EMBEDDING_SERVICE_URL=${EMBEDDING_SERVICE_URL}
       - API_KEY=${API_KEY}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
     volumes:
       # Optional: mount config files or data directories
       - ./config:/app/config:ro
