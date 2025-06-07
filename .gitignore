@@ -50,3 +50,5 @@ db/certs/server.key
 
 fastembed/models/
 qdrant/qdrant_storage/
+
+froxy-apex/.env
