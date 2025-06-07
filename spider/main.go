@@ -15,17 +15,20 @@ func main() {
 	fmt.Println("starting spider bot")
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal(err)
+		log.Panic(err)
+		return
 	}
 
 	err = db.InitQdrant()
 	if err != nil {
 		log.Panic(err)
+		return
 	}
 
 	err = db.InitPostgres(db.Client)
 	if err != nil {
 		log.Println(err)
+		return
 	}
 
 	defer db.GetPostgresHandler().GracefulShutdown(time.Second * 5)
