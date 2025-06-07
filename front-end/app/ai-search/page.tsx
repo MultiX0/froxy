@@ -22,9 +22,6 @@ import {
   Cpu,
   MessageSquare,
   AlertCircle,
-  Share2,
-  ThumbsUp,
-  ThumbsDown,
   RefreshCw,
   Github,
   ChevronDown,
@@ -47,7 +44,7 @@ const aiSearchSuggestions = [
   "TypeScript benefits over JavaScript",
 ]
 
-// WebSocket message types matching Go backend
+// Message types matching the backend
 type MessageType =
   | "analyzing_query"
   | "query_enhanced"
@@ -57,8 +54,9 @@ type MessageType =
   | "analyzing_results"
   | "final_response"
   | "error"
+  | "complete"
 
-interface WSMessage {
+interface SSEMessage {
   type: MessageType
   message: string
   data?: any
@@ -84,7 +82,6 @@ interface Source {
   favicon?: string
 }
 
-
 export default function AISearchPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -105,18 +102,17 @@ export default function AISearchPage() {
   const [activeTab, setActiveTab] = useState<"answer" | "images" | "sources" | "tasks">("answer")
   const [sourcesExpanded, setSourcesExpanded] = useState(true)
 
-  // Real-time WebSocket state
+  // Real-time SSE state
   const [searchSteps, setSearchSteps] = useState<SearchStep[]>([])
   const [currentStep, setCurrentStep] = useState<string>("")
   const [searchStartTime, setSearchStartTime] = useState<number>(0)
   const [searchMetadata, setSearchMetadata] = useState<any>(null)
-  const [wsConnected, setWsConnected] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [aiModel, setAiModel] = useState("meta-llama/llama-4-scout-17b-16e-instruct")
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const responseRef = useRef<HTMLDivElement>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
 
   // Check authentication
   useEffect(() => {
@@ -157,7 +153,7 @@ export default function AISearchPage() {
     }
   }
 
-  // Real-time AI search with WebSocket
+  // Real-time AI search with Server-Sent Events
   const fetchAIResponseRealTime = async (query: string) => {
     setLoading(true)
     setIsTyping(false)
@@ -168,151 +164,155 @@ export default function AISearchPage() {
     setSearchSteps([])
     setCurrentStep("Connecting to search engine...")
     setSearchStartTime(Date.now())
-    setWsConnected(false)
     setFeedbackGiven(null)
 
+    // Close any existing EventSource
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+    }
+
     try {
-      // Connect to WebSocket endpoint
-      const wsUrl = "ws://localhost:8080/ws/search"
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
+      // Start the SSE connection to our backend
+      const response = await fetch("/api/ai-search-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error("No response body reader available")
+      }
 
       // Set timeout for the entire operation
       const timeout = setTimeout(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.close(1000, "Operation timeout")
-        }
+        reader.cancel()
         setError("Search operation timed out")
         setLoading(false)
       }, 60000) // 60 second timeout
 
-      ws.onopen = () => {
-        console.log("Connected to WebSocket")
-        setWsConnected(true)
-        setConnectionError(null)
-        setCurrentStep("Connected! Sending query...")
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
 
-        // Send the search query
-        ws.send(JSON.stringify({ query }))
-      }
-
-      ws.onmessage = (event) => {
-        try {
-          const message: WSMessage = JSON.parse(event.data)
-          console.log(`[${message.type}] ${message.message} - Progress: ${message.progress || 0}%`)
-
-          // Update current step
-          setCurrentStep(message.message)
-
-          // Add or update step in the steps array
-          setSearchSteps((prevSteps) => {
-            const existingStepIndex = prevSteps.findIndex((step) => step.type === message.type)
-
-            const newStep: SearchStep = {
-              type: message.type,
-              message: message.message,
-              progress: message.progress || 0,
-              timestamp: message.timestamp,
-              completed: message.type === "final_response" || message.progress === 100,
-              isActive: message.type !== "final_response" && message.progress !== 100,
-            }
-
-            if (existingStepIndex >= 0) {
-              // Update existing step
-              const updatedSteps = [...prevSteps]
-              updatedSteps[existingStepIndex] = newStep
-              return updatedSteps
-            } else {
-              // Add new step
-              return [...prevSteps, newStep]
-            }
-          })
-
-          if (message.type === "final_response") {
+          if (done) {
             clearTimeout(timeout)
-            const finalResult = message.data
-
-            // Process the final result
-            const formattedResponse = formatResponse(finalResult, query)
-
-            // Set sources
-            setSources(formattedResponse.sources)
-            setSearchMetadata(formattedResponse.metadata)
-            setAiModel(formattedResponse.metadata.model || "meta-llama/llama-4-scout-17b-16e-instruct")
-
-            // Start typing effect
-            setIsTyping(true)
-            setCurrentStep("Generating response...")
-
-            // Lightning fast typing effect with smooth scrolling
-            const fullResponse = formattedResponse.answer
-            let currentText = ""
-
-            const typeResponse = async () => {
-              for (let i = 0; i < fullResponse.length; i++) {
-                currentText += fullResponse[i]
-                setAiResponse(currentText)
-
-                // Smooth scroll every few characters
-                if (i % 10 === 0) {
-                  smoothScrollToBottom()
-                }
-
-                // Lightning fast typing speed - 1ms
-                await new Promise((resolve) => setTimeout(resolve, 0.5))
-              }
-
-              // Final scroll to ensure we're at the bottom
-              smoothScrollToBottom()
-
-              setIsTyping(false)
-              setCurrentStep("Complete")
-              setLoading(false)
-
-              // Close WebSocket after typing animation completes and a small delay
-              setTimeout(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.close(1000, "Search completed successfully")
-                }
-              }, 500)
-            }
-
-            typeResponse()
-          } else if (message.type === "error") {
-            clearTimeout(timeout)
-            setError(message.message)
-            setLoading(false)
-            ws.close()
+            break
           }
-        } catch (error) {
-          console.error("Error parsing WebSocket message:", error)
-          setError("Failed to parse server response")
+
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = chunk.split("\n")
+
+          for (const line of lines) {
+            if (line.startsWith("data: ") && line.trim() !== "data: ") {
+              try {
+                const jsonStr = line.slice(6).trim() // Remove 'data: ' prefix and trim
+                if (jsonStr) {
+                  // Only parse if there's actual content
+                  const message: SSEMessage = JSON.parse(jsonStr)
+
+                  console.log(`[${message.type}] ${message.message} - Progress: ${message.progress || 0}%`)
+
+                  // Update current step
+                  setCurrentStep(message.message)
+
+                  // Add or update step in the steps array
+                  setSearchSteps((prevSteps) => {
+                    const existingStepIndex = prevSteps.findIndex((step) => step.type === message.type)
+
+                    const newStep: SearchStep = {
+                      type: message.type,
+                      message: message.message,
+                      progress: message.progress || 0,
+                      timestamp: message.timestamp,
+                      completed: message.type === "final_response" || message.progress === 100,
+                      isActive:
+                        message.type !== "final_response" && message.progress !== 100 && message.type !== "complete",
+                    }
+
+                    if (existingStepIndex >= 0) {
+                      // Update existing step
+                      const updatedSteps = [...prevSteps]
+                      updatedSteps[existingStepIndex] = newStep
+                      return updatedSteps
+                    } else {
+                      // Add new step
+                      return [...prevSteps, newStep]
+                    }
+                  })
+
+                  if (message.type === "final_response") {
+                    clearTimeout(timeout)
+                    const finalResult = message.data
+
+                    // Process the final result
+                    const formattedResponse = formatResponse(finalResult, query)
+
+                    // Set sources
+                    setSources(formattedResponse.sources)
+                    setSearchMetadata(formattedResponse.metadata)
+                    setAiModel(formattedResponse.metadata.model || "meta-llama/llama-4-scout-17b-16e-instruct")
+
+                    // Start typing effect
+                    setIsTyping(true)
+                    setCurrentStep("Generating response...")
+
+                    // Lightning fast typing effect with smooth scrolling
+                    const fullResponse = formattedResponse.answer
+                    let currentText = ""
+
+                    const typeResponse = async () => {
+                      for (let i = 0; i < fullResponse.length; i++) {
+                        currentText += fullResponse[i]
+                        setAiResponse(currentText)
+
+                        // Smooth scroll every few characters
+                        if (i % 10 === 0) {
+                          smoothScrollToBottom()
+                        }
+
+                        // Lightning fast typing speed - 0.5ms
+                        await new Promise((resolve) => setTimeout(resolve, 0.5))
+                      }
+
+                      // Final scroll to ensure we're at the bottom
+                      smoothScrollToBottom()
+
+                      setIsTyping(false)
+                      setCurrentStep("Complete")
+                      setLoading(false)
+                    }
+
+                    typeResponse()
+                  } else if (message.type === "error") {
+                    clearTimeout(timeout)
+                    setError(message.message)
+                    setLoading(false)
+                  } else if (message.type === "complete") {
+                    clearTimeout(timeout)
+                    // Stream completed successfully
+                  }
+                }
+              } catch (parseError) {
+                console.error("Error parsing SSE message:", parseError, "Raw line:", line)
+              }
+            }
+          }
         }
-      }
-
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error)
-        setConnectionError("Failed to connect to search engine")
-        setError("Connection error occurred")
-        setLoading(false)
+      } finally {
+        reader.releaseLock()
         clearTimeout(timeout)
-      }
-
-      ws.onclose = (event) => {
-        console.log("WebSocket connection closed:", event.code, event.reason)
-        setWsConnected(false)
-        clearTimeout(timeout)
-
-        // Only show error for unexpected closures
-        if (event.code !== 1000 && event.code !== 1001 && !error && !aiResponse && loading) {
-          // Abnormal closure and no response received
-          setConnectionError("Connection lost unexpectedly")
-          setError("Search was interrupted")
-          setLoading(false)
-        }
       }
     } catch (error) {
-      console.error("AI Search error:", error)
+      console.error("AI Search SSE error:", error)
       setError(error instanceof Error ? error.message : "Failed to start search")
       setLoading(false)
     }
@@ -453,11 +453,11 @@ export default function AISearchPage() {
     }
   }, [query, isAuthenticated])
 
-  // Cleanup WebSocket on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
       }
     }
   }, [])
@@ -884,7 +884,6 @@ export default function AISearchPage() {
 
                       {/* Response Actions */}
                       <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-800/50">
-
                         <div className="flex items-center gap-1">
                           <button
                             onClick={copyToClipboard}

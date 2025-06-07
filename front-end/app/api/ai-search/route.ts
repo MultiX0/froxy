@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     // For environments that don't support WebSocket, redirect to HTTP endpoint
     return NextResponse.json({
       message: "Please use WebSocket connection for real-time search",
-      websocket_url: socket_url,
+      websocket_url: `${socket_url}?apiKey=${encodeURIComponent(apiKey)}`,
       fallback_url: fallback_url,
       query: query,
     })
