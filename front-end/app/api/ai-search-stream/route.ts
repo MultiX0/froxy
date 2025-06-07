@@ -31,10 +31,22 @@ export async function POST(request: NextRequest) {
     }
 
     // Get environment variables
-    const wsUrl = process.env.WEBSOCKET_URL || "ws://localhost:8080/ws/search";
-    const apiKey = process.env.FROXY_APEX_API_KEY || 'apikey';
+    const wsUrl = process.env.WEBSOCKET_URL || "ws://localhost:8080/ws/search"
+    const apiKey = process.env.FROXY_APEX_API_KEY
 
-    // Create a readable stream for Server Sent Events
+    // Validate API key presence
+    if (!apiKey) {
+      console.error("API key is not configured")
+      return new Response(
+        JSON.stringify({ error: "Server configuration error: API key missing" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }
+      )
+    }
+
+    // Create a readable stream for Server-Sent Events
     const encoder = new TextEncoder()
 
     const stream = new ReadableStream({
@@ -48,7 +60,7 @@ export async function POST(request: NextRequest) {
             try {
               controller.close()
             } catch (error) {
-              console.log("Controller already closed:", error)
+              console.error("Error closing controller:", error)
             }
           }
         }
@@ -77,16 +89,16 @@ export async function POST(request: NextRequest) {
             timestamp: new Date().toISOString(),
           })
           closeController()
-        }, 60000) // 60 second timeout
+        }, 60000) // 60-second timeout
 
         try {
-          // Connect to the Go backend WebSocket without any auth headers
-          ws = new WebSocket(`${wsUrl}?apiKey=${encodeURIComponent(apiKey)}`, []);
+          // Connect to the Go backend WebSocket with API key in query parameter
+          console.log("Attempting WebSocket connection to:", wsUrl)
+          ws = new WebSocket(`${wsUrl}?apiKey=${encodeURIComponent(apiKey)}`)
 
+          // Explicitly set WebSocket headers (though browser typically handles this)
           ws.onopen = () => {
             console.log("Connected to Go WebSocket backend")
-
-            // Send connection status
             sendSSE({
               type: "analyzing_query",
               message: "Connected! Sending query...",
@@ -94,7 +106,6 @@ export async function POST(request: NextRequest) {
               timestamp: new Date().toISOString(),
             })
 
-            // Send the search query
             if (ws && ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ query }))
             }
@@ -104,35 +115,25 @@ export async function POST(request: NextRequest) {
             try {
               const message: WSMessage = JSON.parse(event.data)
               console.log(`[${message.type}] ${message.message} - Progress: ${message.progress || 0}%`)
-
-              // Forward the message as SSE
               sendSSE(message)
 
-              // Close stream when final response is received
               if (message.type === "final_response") {
                 clearTimeout(timeout)
-
-                // Send a completion signal
                 sendSSE({
                   type: "complete",
                   message: "Stream completed",
                   progress: 100,
                   timestamp: new Date().toISOString(),
                 })
-
-                // Close the stream after a short delay
                 setTimeout(() => {
                   closeController()
                   if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.close(1000, "Search completed successfully")
                   }
-                }, 500) // Give more time for the final message to be sent
+                }, 500)
               } else if (message.type === "error") {
                 clearTimeout(timeout)
-
-                // Just forward the error message as is
                 sendSSE(message)
-
                 setTimeout(() => {
                   closeController()
                   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -155,14 +156,12 @@ export async function POST(request: NextRequest) {
           ws.onerror = (error) => {
             console.error("WebSocket error:", error)
             clearTimeout(timeout)
-
             sendSSE({
               type: "error",
-              message: "Connection error occurred. Please check your backend configuration.",
+              message: "WebSocket connection error. Vercel may not support WebSocket connections.",
               progress: 0,
               timestamp: new Date().toISOString(),
             })
-
             setTimeout(() => closeController(), 100)
           }
 
@@ -170,17 +169,15 @@ export async function POST(request: NextRequest) {
             console.log("WebSocket connection closed:", event.code, event.reason)
             clearTimeout(timeout)
 
-            // Only send error for unexpected closures and if controller is still open
             if (event.code !== 1000 && event.code !== 1001 && !isControllerClosed) {
               let errorMessage = "Connection lost unexpectedly"
-
-              // Handle specific error codes
               if (event.code === 1006) {
-                errorMessage = "Connection closed abnormally. Please check your backend server."
+                errorMessage = "Connection closed abnormally. Vercel may not support WebSocket connections."
               } else if (event.code === 1002) {
                 errorMessage = "Protocol error. Please check your WebSocket configuration."
+              } else if (event.code === 4001) {
+                errorMessage = "Authentication failed. Invalid API key."
               }
-
               sendSSE({
                 type: "error",
                 message: errorMessage,
@@ -188,8 +185,6 @@ export async function POST(request: NextRequest) {
                 timestamp: new Date().toISOString(),
               })
             }
-
-            // Always try to close controller, but don't throw if already closed
             setTimeout(() => closeController(), 100)
           }
         } catch (error) {
@@ -197,7 +192,7 @@ export async function POST(request: NextRequest) {
           clearTimeout(timeout)
           sendSSE({
             type: "error",
-            message: "Failed to establish connection to search backend",
+            message: "Failed to establish WebSocket connection. Ensure the backend supports WebSocket and is accessible from Vercel.",
             progress: 0,
             timestamp: new Date().toISOString(),
           })
@@ -229,12 +224,11 @@ export async function POST(request: NextRequest) {
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
-      },
+      }
     )
   }
 }
 
-// Handle preflight requests
 export async function OPTIONS() {
   return new Response(null, {
     status: 200,
