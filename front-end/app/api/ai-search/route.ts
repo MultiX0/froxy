@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-const WEBSOCKET_URL = process.env.WEBSOCKET_URL || "ws://localhost:8080/ws/search";
-const FALLBACK_URL = process.env.FALLBACK_URL || "http://localhost:8080/api/search";
-const API_KEY = process.env.FROXY_APEX_API_KEY || "api-key"
+const socket_url = process.env.WEBSOCKET_URL;
+const fallback_url = process.env.FALLBACK_URL || "http://localhost:8080/api/search";
+const apiKey = process.env.FROXY_APEX_API_KEY || "api-key"
 
 // The main functionality uses direct WebSocket connection from frontend
 export async function GET(request: NextRequest) {
@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
     // For environments that don't support WebSocket, redirect to HTTP endpoint
     return NextResponse.json({
       message: "Please use WebSocket connection for real-time search",
-      websocket_url: WEBSOCKET_URL,
-      fallback_url: FALLBACK_URL,
+      websocket_url: socket_url,
+      fallback_url: fallback_url,
       query: query,
     })
   } catch (error) {
@@ -47,11 +47,11 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       start(controller) {
         // Try to connect to the Go backend HTTP endpoint as fallback
-        fetch(FALLBACK_URL, {
+        fetch(fallback_url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${API_KEY}`,
+            "Authorization": `Bearer ${apiKey}`,
           },
           body: JSON.stringify({ query }),
         })
