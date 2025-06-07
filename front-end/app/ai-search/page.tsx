@@ -5,271 +5,35 @@ import { useState, useEffect, useRef } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import {
   ArrowRight,
-  Github,
   Brain,
   Search,
   Copy,
   Check,
   Loader2,
-  ExternalLink,
   Globe,
   BookOpen,
-  ArrowLeft,
   Sparkles,
   Zap,
   LogOut,
   Menu,
   X,
+  Clock,
+  Database,
+  Cpu,
+  MessageSquare,
+  AlertCircle,
+  Share2,
+  ThumbsUp,
+  ThumbsDown,
+  RefreshCw,
+  Github,
+  ChevronDown,
 } from "lucide-react"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
+import { cn } from "@/lib/utils"
 
-// Mock AI responses with sources
-const mockAIResponses: Record<
-  string,
-  { answer: string; sources: Array<{ title: string; url: string; domain: string }> }
-> = {
-  javascript: {
-    answer: `# JavaScript Overview
-
-JavaScript is a versatile, high-level programming language that's essential for modern web development.
-
-## Core Features
-- Dynamic typing and interpreted execution
-- Event-driven programming model  
-- First-class functions and closures
-- Prototype-based object orientation
-
-## Primary Use Cases
-- Frontend web development (DOM manipulation, user interactions)
-- Backend development with Node.js
-- Mobile app development with React Native
-- Desktop applications with Electron
-
-## Popular Frameworks & Libraries
-- **Frontend:** React, Vue.js, Angular, Svelte
-- **Backend:** Express.js, Fastify, Koa
-- **Testing:** Jest, Mocha, Cypress
-
-## Modern Best Practices
-- Use ES6+ syntax (arrow functions, destructuring, modules)
-- Implement proper error handling with try/catch
-- Follow consistent code formatting (Prettier, ESLint)
-- Write comprehensive tests and documentation
-
-## Code Example
-\`\`\`javascript
-// Example of modern JavaScript
-const fetchData = async (url) => {
-  try {
-    const response = await fetch(url);
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching data:", error);
-    throw error;
-  }
-};
-\`\`\`
-
-## Getting Started
-Start with the fundamentals: variables, functions, and DOM manipulation. Then progress to modern frameworks and build projects to solidify your understanding.`,
-    sources: [
-      {
-        title: "JavaScript Guide - MDN Web Docs",
-        url: "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide",
-        domain: "developer.mozilla.org",
-      },
-      {
-        title: "JavaScript.info - The Modern JavaScript Tutorial",
-        url: "https://javascript.info/",
-        domain: "javascript.info",
-      },
-      { title: "Eloquent JavaScript Book", url: "https://eloquentjavascript.net/", domain: "eloquentjavascript.net" },
-    ],
-  },
-  react: {
-    answer: `# React.js
-
-React is a powerful JavaScript library for building user interfaces, developed by Meta (Facebook). It's become the most popular frontend framework due to its component-based architecture and excellent developer experience.
-
-## Core Concepts
-- **Components:** Reusable UI building blocks
-- **Virtual DOM:** Efficient rendering through virtual representation
-- **JSX:** JavaScript syntax extension for writing HTML-like code
-- **Unidirectional Data Flow:** Predictable state management
-
-## Modern React Features
-- **Hooks:** useState, useEffect, useContext for state and lifecycle
-- **Suspense:** Code splitting and lazy loading
-- **Concurrent Features:** Better user experience with concurrent rendering
-- **Server Components:** Server-side rendering improvements
-
-## Essential Ecosystem
-- **Next.js:** Full-stack React framework with SSR/SSG
-- **React Router:** Client-side routing
-- **Redux Toolkit/Zustand:** State management
-- **React Query:** Data fetching and caching
-
-## Code Example
-\`\`\`jsx
-// Modern React component with hooks
-import { useState, useEffect } from 'react';
-
-function UserProfile({ userId }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  
-  useEffect(() => {
-    async function fetchUser() {
-      try {
-        const response = await fetch(\`/api/users/\${userId}\`);
-        const data = await response.json();
-        setUser(data);
-      } catch (error) {
-        console.error("Failed to fetch user:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    
-    fetchUser();
-  }, [userId]);
-  
-  if (loading) return <div>Loading...</div>;
-  if (!user) return <div>User not found</div>;
-  
-  return (
-    <div className="user-profile">
-      <h1>{user.name}</h1>
-      <p>{user.email}</p>
-    </div>
-  );
-}
-\`\`\`
-
-## Best Practices
-- Use functional components with hooks
-- Keep components small and focused
-- Implement proper error boundaries
-- Optimize with React.memo and useMemo when needed
-
-## Learning Path
-1. Master JavaScript fundamentals first
-2. Learn React basics (components, props, state)
-3. Understand hooks and modern patterns
-4. Build projects and explore the ecosystem`,
-    sources: [
-      { title: "React Documentation", url: "https://react.dev/", domain: "react.dev" },
-      { title: "React Tutorial - Official", url: "https://react.dev/learn", domain: "react.dev" },
-      { title: "Next.js Documentation", url: "https://nextjs.org/docs", domain: "nextjs.org" },
-    ],
-  },
-  python: {
-    answer: `# Python Programming Language
-
-Python is a high-level, interpreted programming language known for its simplicity, readability, and versatility. It's an excellent choice for beginners and professionals alike.
-
-## Key Characteristics
-- **Readable Syntax:** Clean, English-like code structure
-- **Dynamically Typed:** No need to declare variable types
-- **Extensive Libraries:** Huge standard library and third-party packages
-- **Cross-Platform:** Runs on Windows, macOS, Linux, and more
-
-## Popular Applications
-- **Web Development:** Django, Flask, FastAPI for robust web applications
-- **Data Science:** NumPy, Pandas, Matplotlib for data analysis
-- **Machine Learning:** Scikit-learn, TensorFlow, PyTorch for AI
-- **Automation:** Scripting and task automation
-- **Scientific Computing:** Research and computational work
-
-## Code Example
-\`\`\`python
-# Simple data analysis with Python
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Load and analyze data
-def analyze_sales_data(file_path):
-    # Read data
-    df = pd.read_csv(file_path)
-    
-    # Basic statistics
-    total_sales = df['sales'].sum()
-    avg_sales = df['sales'].mean()
-    
-    # Group by category
-    category_sales = df.groupby('category')['sales'].sum()
-    
-    # Create visualization
-    plt.figure(figsize=(10, 6))
-    category_sales.plot(kind='bar')
-    plt.title('Sales by Category')
-    plt.ylabel('Total Sales ($)')
-    plt.tight_layout()
-    plt.savefig('sales_analysis.png')
-    
-    return {
-        'total': total_sales,
-        'average': avg_sales,
-        'by_category': category_sales.to_dict()
-    }
-\`\`\`
-
-## Essential Libraries
-- **Web:** Django (full-featured), Flask (lightweight), FastAPI (modern)
-- **Data:** NumPy (numerical), Pandas (data manipulation), Matplotlib (visualization)
-- **ML:** Scikit-learn (traditional ML), TensorFlow/PyTorch (deep learning)
-
-## Best Practices
-- Follow PEP 8 style guide for consistent code
-- Use virtual environments (venv, conda) for project isolation
-- Write docstrings and comprehensive tests
-- Leverage list comprehensions and built-in functions
-
-## Getting Started
-Python's gentle learning curve makes it perfect for beginners. Start with basic syntax, then explore libraries relevant to your interests (web, data, automation).`,
-    sources: [
-      { title: "Python.org Official Documentation", url: "https://docs.python.org/3/", domain: "python.org" },
-      { title: "Real Python Tutorials", url: "https://realpython.com/", domain: "realpython.com" },
-      { title: "Python Package Index (PyPI)", url: "https://pypi.org/", domain: "pypi.org" },
-    ],
-  },
-  default: {
-    answer: `# How Can I Help You?
-
-I'm an AI assistant specialized in programming, technology, and development topics. I can help you understand concepts, provide code examples, explain best practices, and guide your learning journey.
-
-## What I Can Help With
-- Programming languages (JavaScript, Python, Java, Go, etc.)
-- Web development frameworks and tools
-- Data science and machine learning concepts
-- Software engineering best practices
-- Technology explanations and tutorials
-- Code debugging and optimization tips
-
-## How to Get Better Results
-- Be specific about your question or problem
-- Mention your experience level (beginner, intermediate, advanced)
-- Include relevant context or code snippets if applicable
-- Ask follow-up questions for deeper understanding
-
-## Popular Topics to Explore
-- "How to learn React hooks"
-- "Python web development best practices"  
-- "Machine learning algorithms explained"
-- "JavaScript async/await vs promises"
-- "Database optimization techniques"
-
-Feel free to ask me anything about programming or technology!`,
-    sources: [
-      { title: "Stack Overflow", url: "https://stackoverflow.com/", domain: "stackoverflow.com" },
-      { title: "GitHub", url: "https://github.com/", domain: "github.com" },
-      { title: "MDN Web Docs", url: "https://developer.mozilla.org/", domain: "developer.mozilla.org" },
-    ],
-  },
-}
-
+// AI search suggestions
 const aiSearchSuggestions = [
   "How to learn React hooks?",
   "Best practices for Python web development",
@@ -283,6 +47,44 @@ const aiSearchSuggestions = [
   "TypeScript benefits over JavaScript",
 ]
 
+// WebSocket message types matching Go backend
+type MessageType =
+  | "analyzing_query"
+  | "query_enhanced"
+  | "searching_db"
+  | "db_results_found"
+  | "processing_chunks"
+  | "analyzing_results"
+  | "final_response"
+  | "error"
+
+interface WSMessage {
+  type: MessageType
+  message: string
+  data?: any
+  progress?: number
+  timestamp: string
+}
+
+interface SearchStep {
+  type: MessageType
+  message: string
+  progress: number
+  timestamp: string
+  completed: boolean
+  isActive: boolean
+}
+
+// Update the Source interface to include favicon
+interface Source {
+  title: string
+  url: string
+  domain: string
+  id: number
+  favicon?: string
+}
+
+
 export default function AISearchPage() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -292,14 +94,29 @@ export default function AISearchPage() {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [selectedSuggestion, setSelectedSuggestion] = useState(-1)
   const [aiResponse, setAiResponse] = useState("")
-  const [sources, setSources] = useState<Array<{ title: string; url: string; domain: string }>>([])
+  const [sources, setSources] = useState<Source[]>([])
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [feedbackGiven, setFeedbackGiven] = useState<"up" | "down" | null>(null)
+  const [activeTab, setActiveTab] = useState<"answer" | "images" | "sources" | "tasks">("answer")
+  const [sourcesExpanded, setSourcesExpanded] = useState(true)
+
+  // Real-time WebSocket state
+  const [searchSteps, setSearchSteps] = useState<SearchStep[]>([])
+  const [currentStep, setCurrentStep] = useState<string>("")
+  const [searchStartTime, setSearchStartTime] = useState<number>(0)
+  const [searchMetadata, setSearchMetadata] = useState<any>(null)
+  const [wsConnected, setWsConnected] = useState(false)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
+  const [aiModel, setAiModel] = useState("meta-llama/llama-4-scout-17b-16e-instruct")
+
   const searchInputRef = useRef<HTMLInputElement>(null)
   const responseRef = useRef<HTMLDivElement>(null)
+  const wsRef = useRef<WebSocket | null>(null)
 
   // Check authentication
   useEffect(() => {
@@ -311,42 +128,339 @@ export default function AISearchPage() {
     }
   }, [router])
 
-  // Simulate AI response with typing effect
-  const simulateAIResponse = async (query: string) => {
+  // Smooth auto-scroll function
+  const smoothScrollToBottom = () => {
+    if (responseRef.current) {
+      const element = responseRef.current
+      const targetScrollTop = element.scrollHeight
+      const startScrollTop = window.pageYOffset
+      const distance = targetScrollTop - startScrollTop
+      const duration = 300 // ms
+      let start: number | null = null
+
+      function animation(currentTime: number) {
+        if (start === null) start = currentTime
+        const timeElapsed = currentTime - start
+        const run = ease(timeElapsed, startScrollTop, distance, duration)
+        window.scrollTo(0, run)
+        if (timeElapsed < duration) requestAnimationFrame(animation)
+      }
+
+      function ease(t: number, b: number, c: number, d: number) {
+        t /= d / 2
+        if (t < 1) return (c / 2) * t * t + b
+        t--
+        return (-c / 2) * (t * (t - 2) - 1) + b
+      }
+
+      requestAnimationFrame(animation)
+    }
+  }
+
+  // Real-time AI search with WebSocket
+  const fetchAIResponseRealTime = async (query: string) => {
     setLoading(true)
-    setIsTyping(true)
+    setIsTyping(false)
     setAiResponse("")
     setSources([])
+    setError(null)
+    setConnectionError(null)
+    setSearchSteps([])
+    setCurrentStep("Connecting to search engine...")
+    setSearchStartTime(Date.now())
+    setWsConnected(false)
+    setFeedbackGiven(null)
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      // Connect to WebSocket endpoint
+      const wsUrl = "ws://localhost:8080/ws/search"
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
 
-    const responseData = mockAIResponses[query.toLowerCase()] || mockAIResponses.default
-    const response = responseData.answer
-    const responseSources = responseData.sources
+      // Set timeout for the entire operation
+      const timeout = setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.close(1000, "Operation timeout")
+        }
+        setError("Search operation timed out")
+        setLoading(false)
+      }, 60000) // 60 second timeout
 
-    // Set sources immediately
-    setSources(responseSources)
+      ws.onopen = () => {
+        console.log("Connected to WebSocket")
+        setWsConnected(true)
+        setConnectionError(null)
+        setCurrentStep("Connected! Sending query...")
 
-    // Typing effect
-    let currentText = ""
-    for (let i = 0; i < response.length; i++) {
-      currentText += response[i]
-      setAiResponse(currentText)
-      // Faster typing speed
-      await new Promise((resolve) => setTimeout(resolve, 60))
+        // Send the search query
+        ws.send(JSON.stringify({ query }))
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const message: WSMessage = JSON.parse(event.data)
+          console.log(`[${message.type}] ${message.message} - Progress: ${message.progress || 0}%`)
+
+          // Update current step
+          setCurrentStep(message.message)
+
+          // Add or update step in the steps array
+          setSearchSteps((prevSteps) => {
+            const existingStepIndex = prevSteps.findIndex((step) => step.type === message.type)
+
+            const newStep: SearchStep = {
+              type: message.type,
+              message: message.message,
+              progress: message.progress || 0,
+              timestamp: message.timestamp,
+              completed: message.type === "final_response" || message.progress === 100,
+              isActive: message.type !== "final_response" && message.progress !== 100,
+            }
+
+            if (existingStepIndex >= 0) {
+              // Update existing step
+              const updatedSteps = [...prevSteps]
+              updatedSteps[existingStepIndex] = newStep
+              return updatedSteps
+            } else {
+              // Add new step
+              return [...prevSteps, newStep]
+            }
+          })
+
+          if (message.type === "final_response") {
+            clearTimeout(timeout)
+            const finalResult = message.data
+
+            // Process the final result
+            const formattedResponse = formatResponse(finalResult, query)
+
+            // Set sources
+            setSources(formattedResponse.sources)
+            setSearchMetadata(formattedResponse.metadata)
+            setAiModel(formattedResponse.metadata.model || "meta-llama/llama-4-scout-17b-16e-instruct")
+
+            // Start typing effect
+            setIsTyping(true)
+            setCurrentStep("Generating response...")
+
+            // Lightning fast typing effect with smooth scrolling
+            const fullResponse = formattedResponse.answer
+            let currentText = ""
+
+            const typeResponse = async () => {
+              for (let i = 0; i < fullResponse.length; i++) {
+                currentText += fullResponse[i]
+                setAiResponse(currentText)
+
+                // Smooth scroll every few characters
+                if (i % 10 === 0) {
+                  smoothScrollToBottom()
+                }
+
+                // Lightning fast typing speed - 1ms
+                await new Promise((resolve) => setTimeout(resolve, 0.5))
+              }
+
+              // Final scroll to ensure we're at the bottom
+              smoothScrollToBottom()
+
+              setIsTyping(false)
+              setCurrentStep("Complete")
+              setLoading(false)
+
+              // Close WebSocket after typing animation completes and a small delay
+              setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.close(1000, "Search completed successfully")
+                }
+              }, 500)
+            }
+
+            typeResponse()
+          } else if (message.type === "error") {
+            clearTimeout(timeout)
+            setError(message.message)
+            setLoading(false)
+            ws.close()
+          }
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error)
+          setError("Failed to parse server response")
+        }
+      }
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error)
+        setConnectionError("Failed to connect to search engine")
+        setError("Connection error occurred")
+        setLoading(false)
+        clearTimeout(timeout)
+      }
+
+      ws.onclose = (event) => {
+        console.log("WebSocket connection closed:", event.code, event.reason)
+        setWsConnected(false)
+        clearTimeout(timeout)
+
+        // Only show error for unexpected closures
+        if (event.code !== 1000 && event.code !== 1001 && !error && !aiResponse && loading) {
+          // Abnormal closure and no response received
+          setConnectionError("Connection lost unexpectedly")
+          setError("Search was interrupted")
+          setLoading(false)
+        }
+      }
+    } catch (error) {
+      console.error("AI Search error:", error)
+      setError(error instanceof Error ? error.message : "Failed to start search")
+      setLoading(false)
     }
+  }
 
-    setIsTyping(false)
-    setLoading(false)
+  // Format response function with citation numbers
+  const formatResponse = (searchResult: any, query: string) => {
+    try {
+      console.log("Raw search result:", searchResult) // Debug log
+
+      // The response structure from your Go backend
+      const response = searchResult.response
+
+      if (!response || !response.choices || !response.choices[0] || !response.choices[0].message) {
+        throw new Error("Invalid response format from AI API")
+      }
+
+      const messageContent = response.choices[0].message.content
+      console.log("Message content:", messageContent) // Debug log
+
+      let parsedContent: any
+
+      try {
+        // Parse the JSON response from the AI
+        parsedContent = JSON.parse(messageContent)
+        console.log("Parsed content:", parsedContent) // Debug log
+      } catch (error) {
+        console.error("Failed to parse AI response content:", error)
+        // Fallback: treat the entire content as summary
+        parsedContent = {
+          summary: messageContent,
+          results: [],
+        }
+      }
+
+      // Extract the summary/answer from the parsed content
+      const summary = parsedContent.summary || parsedContent.answer || messageContent || ""
+      const results = parsedContent.results || []
+
+      console.log("Extracted summary:", summary) // Debug log
+      console.log("Extracted results:", results) // Debug log
+
+      // Process sources with citation numbers
+      const sourcesWithIds = results
+        .map((result: any, index: number) => {
+          const url = result.reference || result.url || result.source || ""
+          // Only use favicon if it exists and is not empty
+          const favicon =
+            result.reference_favicon && result.reference_favicon.trim() !== "" ? result.reference_favicon : ""
+
+          let domain = "Unknown"
+          try {
+            if (url) {
+              const urlObj = new URL(url)
+              domain = urlObj.hostname
+            }
+          } catch (error) {
+            console.error("Invalid URL:", url)
+          }
+
+          // Clean title from Markdown symbols
+          let title = result.title || result.point?.substring(0, 50) + "..." || `Source ${index + 1}`
+          // Remove Markdown symbols like **, __, [], (), etc.
+          title = title.replace(/(\*\*|\*|__|_|\[|\]|$$|$$|`|#|>)/g, "")
+
+          return {
+            id: index + 1,
+            title: title,
+            url: url,
+            domain: domain,
+            favicon: favicon,
+          }
+        })
+        .filter((source: { url: any }) => source.url)
+
+      // Build the full answer from summary and results
+      let fullAnswer = summary
+
+      // If we have detailed results, append them to the summary
+      if (results.length > 0) {
+        const detailedContent = results
+          .map((result: any, index: number) => {
+            const point = result.point || result.content || ""
+            return `\n\n**Source ${index + 1}:**\n${point}`
+          })
+          .join("")
+
+        fullAnswer = summary + detailedContent
+      }
+
+      // Add citation numbers to the response text
+      let processedAnswer = fullAnswer
+      sourcesWithIds.forEach((source: { id: any; title: string }) => {
+        const citationRegex = new RegExp(`\\[${source.id}\\]`, "g")
+        if (!citationRegex.test(processedAnswer)) {
+          // Add citation at the end of relevant content sections
+          const sourcePattern = new RegExp(`(\\*\\*Source ${source.id}:?\\*\\*[^*]+)`, "gi")
+          processedAnswer = processedAnswer.replace(sourcePattern, `$1 [${source.id}]`)
+        }
+      })
+
+      console.log("Final processed answer:", processedAnswer) // Debug log
+
+      return {
+        answer: processedAnswer,
+        content: results.map((result: any) => result.point || result.content || result).join("\n\n"),
+        sources: sourcesWithIds,
+        metadata: {
+          query: query,
+          searchTime: Date.now() - searchStartTime,
+          totalTime: searchResult.total_time,
+          chunksUsed: searchResult.chunks_used,
+          sourcesCount: searchResult.sources_count,
+          model: response.model || "meta-llama/llama-4-scout-17b-16e-instruct",
+          usage: response.usage || {},
+        },
+      }
+    } catch (error) {
+      console.error("Error formatting response:", error)
+
+      return {
+        answer: "An error occurred while processing the search results.",
+        content: "",
+        sources: [],
+        metadata: {
+          query: query,
+          searchTime: Date.now() - searchStartTime,
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+      }
+    }
   }
 
   useEffect(() => {
     if (query && isAuthenticated) {
       setSearchQuery(query)
-      simulateAIResponse(query)
+      fetchAIResponseRealTime(query)
     }
   }, [query, isAuthenticated])
+
+  // Cleanup WebSocket on unmount
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (searchQuery.length > 0) {
@@ -412,6 +526,9 @@ export default function AISearchPage() {
 
   const handleSignOut = () => {
     localStorage.removeItem("user_authenticated")
+    // Clear server-side cookies
+    document.cookie = "auth_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"
+    document.cookie = "user_authenticated=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"
     router.push("/")
     setIsMenuOpen(false)
   }
@@ -420,365 +537,481 @@ export default function AISearchPage() {
     setIsMenuOpen((prev) => !prev)
   }
 
+  const handleFeedback = (type: "up" | "down") => {
+    setFeedbackGiven(type)
+    console.log(`User gave ${type} feedback`)
+  }
+
   const showSuggestions = suggestions.length > 0 && isFocused
+
+  const getStepIcon = (type: MessageType, isActive: boolean, completed: boolean) => {
+    if (completed) {
+      return <Check className="w-3 h-3 text-emerald-400" />
+    }
+
+    if (isActive) {
+      return <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+    }
+
+    switch (type) {
+      case "analyzing_query":
+        return <Brain className="w-3 h-3 text-gray-500" />
+      case "query_enhanced":
+        return <Sparkles className="w-3 h-3 text-gray-500" />
+      case "searching_db":
+        return <Database className="w-3 h-3 text-gray-500" />
+      case "db_results_found":
+        return <BookOpen className="w-3 h-3 text-gray-500" />
+      case "processing_chunks":
+        return <Cpu className="w-3 h-3 text-gray-500" />
+      case "analyzing_results":
+        return <Zap className="w-3 h-3 text-gray-500" />
+      case "final_response":
+        return <MessageSquare className="w-3 h-3 text-gray-500" />
+      default:
+        return <Clock className="w-3 h-3 text-gray-500" />
+    }
+  }
+
+  // Function to render markdown with citation numbers
+  const renderMarkdownWithCitations = (text: string) => {
+    // Replace citation numbers with styled spans
+    const parts = text.split(/(\[\d+\])/)
+
+    return (
+      <div className="prose prose-invert max-w-none">
+        {parts.map((part, index) => {
+          const citationMatch = part.match(/\[(\d+)\]/)
+          if (citationMatch) {
+            const num = citationMatch[1]
+            return (
+              <sup key={index}>
+                <a
+                  href={`#source-${num}`}
+                  className="inline-flex items-center justify-center w-4 h-4 text-xs font-medium bg-blue-500/20 text-blue-400 rounded border border-blue-500/30 hover:bg-blue-500/30 transition-colors no-underline ml-0.5"
+                >
+                  {num}
+                </a>
+              </sup>
+            )
+          }
+          return (
+            <ReactMarkdown
+              key={index}
+              components={{
+                h1: ({ node, ...props }) => <h1 className="text-xl font-semibold text-white mt-0 mb-4" {...props} />,
+                h2: ({ node, ...props }) => <h2 className="text-lg font-medium text-white mt-6 mb-3" {...props} />,
+                h3: ({ node, ...props }) => <h3 className="text-base font-medium text-white mt-4 mb-2" {...props} />,
+                p: ({ node, ...props }) => <p className="mb-3 text-gray-200 leading-relaxed" {...props} />,
+                ul: ({ node, ...props }) => <ul className="mb-3 pl-4 list-disc space-y-1" {...props} />,
+                ol: ({ node, ...props }) => <ol className="mb-3 pl-4 list-decimal space-y-1" {...props} />,
+                li: ({ node, ...props }) => <li className="text-gray-200" {...props} />,
+                a: ({ node, ...props }) => (
+                  <a
+                    className="text-blue-400 hover:text-blue-300 underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    {...props}
+                  />
+                ),
+                code: ({ node, inline, ...props }: any) =>
+                  inline ? (
+                    <code className="bg-gray-800/60 px-1.5 py-0.5 rounded text-sm text-blue-300 font-mono" {...props} />
+                  ) : (
+                    <code {...props} />
+                  ),
+                pre: ({ node, ...props }) => (
+                  <pre
+                    className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 overflow-x-auto mb-4 text-sm font-mono"
+                    {...props}
+                  />
+                ),
+                strong: ({ node, ...props }) => <strong className="font-medium text-white" {...props} />,
+                em: ({ node, ...props }) => <em className="text-gray-200 italic" {...props} />,
+                blockquote: ({ node, ...props }) => (
+                  <blockquote className="border-l-2 border-gray-600 pl-4 italic text-gray-300 my-4" {...props} />
+                ),
+                hr: ({ node, ...props }) => <hr className="border-gray-700 my-6" {...props} />,
+              }}
+            >
+              {part}
+            </ReactMarkdown>
+          )
+        })}
+      </div>
+    )
+  }
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-[#0F0F0F] flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400 mx-auto mb-4" />
-          <p className="text-gray-400 font-mono">Checking authentication...</p>
+          <Loader2 className="w-6 h-6 animate-spin text-blue-400 mx-auto mb-4" />
+          <p className="text-gray-400 text-sm">Checking authentication...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-black relative overflow-hidden">
-      {/* Enhanced Background */}
-      <div className={`absolute inset-0 transition-all duration-300 ${isMenuOpen ? "blur-sm" : ""}`}>
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-purple-500/6 rounded-full blur-[120px] animate-pulse"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[400px] bg-blue-500/4 rounded-full blur-[140px] animate-pulse"></div>
-        <div className="absolute top-1/2 left-1/4 w-[400px] h-[300px] bg-gradient-to-r from-purple-500/3 to-blue-500/3 rounded-full blur-[100px]"></div>
-      </div>
-
-      {/* Floating Elements */}
-      <div className={`absolute top-20 right-20 opacity-10 transition-all duration-300 ${isMenuOpen ? "blur-sm" : ""}`}>
-        <Sparkles className="w-8 h-8 text-purple-400 animate-pulse" />
-      </div>
-      <div
-        className={`absolute bottom-32 left-20 opacity-10 transition-all duration-300 ${isMenuOpen ? "blur-sm" : ""}`}
-      >
-        <Zap className="w-6 h-6 text-blue-400 animate-bounce" />
-      </div>
-      <div
-        className={`absolute top-1/3 right-1/4 opacity-10 transition-all duration-300 ${isMenuOpen ? "blur-sm" : ""}`}
-      >
-        <Brain className="w-10 h-10 text-purple-400 animate-pulse" />
-      </div>
-
+    <div className="min-h-screen bg-[#0F0F0F] text-white">
       {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-gray-800/50 bg-black/80 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          {/* Logo */}
-          <Link
-            href="/"
-            className={`text-2xl font-bold text-white mr-0 sm:mr-6 transition-all duration-300 ${isMenuOpen ? "blur-sm" : ""}`}
-          >
-            <span className="text-blue-400 font-mono">FROXY</span>
-          </Link>
-
-          {/* Search Bar */}
-          <form
-            onSubmit={handleSearch}
-            className={`flex-1 max-w-2xl relative mx-2 sm:mx-4 transition-all duration-300 ${isMenuOpen ? "blur-sm" : ""}`}
-          >
-            <div className="relative">
-              <div
-                className={`relative bg-gray-900/40 backdrop-blur-xl border rounded-full transition-all duration-300 ${
-                  isFocused
-                    ? "border-purple-500/50 shadow-lg shadow-purple-500/10"
-                    : "border-gray-700/30 hover:border-gray-600/50"
-                }`}
-              >
-                <div className="flex items-center">
-                  <Brain
-                    className={`absolute left-3 w-4 h-4 transition-colors duration-300 ${
-                      isFocused ? "text-purple-400" : "text-gray-500"
-                    }`}
-                  />
-                  <input
-                    ref={searchInputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setTimeout(() => setIsFocused(false), 150)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask anything..."
-                    className="w-full py-2.5 pl-10 pr-10 bg-transparent text-white text-sm focus:outline-none font-mono placeholder-gray-400"
-                  />
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className={`absolute right-2 p-1.5 rounded-full transition-all duration-300 ${
-                      searchQuery.length > 0
-                        ? "bg-purple-500 hover:bg-purple-600 text-white"
-                        : "bg-gray-700/50 text-gray-400"
-                    }`}
-                  >
-                    {loading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Suggestions */}
-              {showSuggestions && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl overflow-hidden z-50">
-                  {suggestions.map((suggestion, index) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onMouseDown={(e) => {
-                        e.preventDefault()
-                        selectSuggestion(suggestion)
-                      }}
-                      className={`w-full text-left px-4 py-3 text-sm transition-colors duration-150 font-mono ${
-                        index === selectedSuggestion
-                          ? "bg-purple-500/20 text-purple-300"
-                          : "text-gray-300 hover:bg-gray-800/50 hover:text-white"
-                      }`}
-                    >
-                      <Brain className="inline w-4 h-4 mr-3 text-gray-500" />
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </form>
-
-          {/* Hamburger Menu Button - Always sharp and clickable */}
-          <button
-            onClick={toggleMenu}
-            className="md:hidden text-gray-400 hover:text-white transition-colors duration-200 flex-shrink-0 relative z-[60]"
-          >
-            {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-
-          {/* Desktop Navigation */}
-          <div
-            className={`hidden md:flex items-center gap-4 transition-all duration-300 ${isMenuOpen ? "blur-sm" : ""}`}
-          >
-            <Link
-              href="/search"
-              className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
-            >
-              <Search className="w-4 h-4 mr-2" />
-              Search
+      <header className="sticky top-0 z-50 bg-[#0F0F0F]/80 backdrop-blur-xl border-b border-gray-800/50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3">
+          <div className="flex items-center justify-between">
+            {/* Logo */}
+            <Link href="/" className="text-lg font-semibold text-white">
+              <span className="text-blue-400 font-mono">FROXY</span>
             </Link>
-            <button
-              onClick={handleSignOut}
-              className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Sign Out
-            </button>
-            <a
-              href="https://github.com/MultiX0/froxy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-white transition-colors duration-200"
-            >
-              <Github className="w-4 h-4" />
-            </a>
-          </div>
 
-          {/* Mobile Menu - Sharp and fully clickable */}
-          {isMenuOpen && (
-            <div className="absolute right-0 top-full mt-2 bg-gray-900/95 backdrop-blur-xl border border-gray-800/50 rounded-xl shadow-2xl overflow-hidden z-[60] min-w-[200px] md:hidden">
-              <div className="flex flex-col">
-                <Link
-                  href="/search"
-                  className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono px-4 py-3 hover:bg-gray-800/50"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <Search className="w-4 h-4 mr-2" />
-                  Search
-                </Link>
-                <button
-                  onClick={handleSignOut}
-                  className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono px-4 py-3 hover:bg-gray-800/50"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </button>
-                <a
-                  href="https://github.com/MultiX0/froxy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center text-gray-400 hover:text-white transition-colors duration-200 text-sm font-mono px-4 py-3 hover:bg-gray-800/50"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <Github className="w-4 h-4 mr-2" />
-                  GitHub
-                </a>
-              </div>
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center gap-4">
+              <Link
+                href="/search"
+                className="flex items-center text-gray-400 hover:text-white transition-colors text-sm px-3 py-1.5 rounded-lg hover:bg-gray-800/50"
+              >
+                <Search className="w-4 h-4 mr-2" />
+                Search
+              </Link>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center text-gray-400 hover:text-white transition-colors text-sm px-3 py-1.5 rounded-lg hover:bg-gray-800/50"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </button>
+              <a
+                href="https://github.com/MultiX0/froxy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-gray-800/50"
+              >
+                <Github className="w-4 h-4" />
+              </a>
             </div>
-          )}
+
+            {/* Mobile Menu Button */}
+            <button onClick={toggleMenu} className="md:hidden text-gray-400 hover:text-white transition-colors p-1.5">
+              {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+
+            {/* Mobile Menu */}
+            {isMenuOpen && (
+              <div className="absolute right-4 top-full mt-2 bg-gray-900/95 backdrop-blur-xl border border-gray-800 rounded-xl shadow-2xl overflow-hidden z-60 min-w-[180px] md:hidden">
+                <div className="flex flex-col p-2">
+                  <Link
+                    href="/search"
+                    className="flex items-center text-gray-400 hover:text-white transition-colors text-sm px-3 py-2 rounded-lg hover:bg-gray-800/50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Search className="w-4 h-4 mr-2" />
+                    Search
+                  </Link>
+                  <button
+                    onClick={handleSignOut}
+                    className="flex items-center text-gray-400 hover:text-white transition-colors text-sm px-3 py-2 rounded-lg hover:bg-gray-800/50"
+                  >
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </button>
+                  <a
+                    href="https://github.com/MultiX0/froxy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center text-gray-400 hover:text-white transition-colors text-sm px-3 py-2 rounded-lg hover:bg-gray-800/50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Github className="w-4 h-4 mr-2" />
+                    GitHub
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main
-        className={`relative z-10 max-w-6xl mx-auto px-4 sm:px-6 py-6 transition-all duration-300 ${isMenuOpen ? "blur-sm" : ""}`}
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* AI Response */}
-          <div className="lg:col-span-2">
-            {query && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center">
-                    <Link href="/" className="mr-3 text-gray-400 hover:text-white transition-colors">
-                      <ArrowLeft className="w-4 h-4" />
-                    </Link>
-                    <h1 className="text-xl font-medium text-white">{query}</h1>
-                  </div>
-                  {aiResponse && (
-                    <button
-                      onClick={copyToClipboard}
-                      className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 text-gray-400 hover:text-white transition-all duration-200"
-                      title="Copy response"
-                    >
-                      {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                    </button>
+      {/* Main Content with bottom padding for fixed search bar */}
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 pb-32">
+        {query ? (
+          <div className="space-y-6">
+            {/* Query Display */}
+            <div>
+              <h1 className="text-2xl font-medium text-white mb-6 leading-tight">{query}</h1>
+            </div>
+
+            {/* Real-time Search Progress */}
+            {(loading || searchSteps.length > 0) && (
+              <div className="bg-gray-900/30 border border-gray-800/50 rounded-xl p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-white">Searching</span>
+                  {searchStartTime > 0 && (
+                    <span className="text-xs text-gray-400 ml-auto">
+                      {Math.round((Date.now() - searchStartTime) / 1000)}s
+                    </span>
                   )}
                 </div>
 
-                {loading && !aiResponse ? (
-                  <div className="flex items-center gap-3 py-8">
-                    <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
-                    <span className="text-gray-400 font-mono">Searching and analyzing...</span>
+                {/* Connection Error */}
+                {connectionError && (
+                  <div className="mb-3 p-3 bg-red-900/20 border border-red-800/30 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400" />
+                    <span className="text-sm text-red-400">{connectionError}</span>
                   </div>
-                ) : (
-                  <div className="prose prose-invert max-w-none" ref={responseRef}>
-                    <div className="text-gray-300 leading-relaxed">
-                      <ReactMarkdown
-                        components={{
-                          h1: ({ node, ...props }) => (
-                            <h1 className="text-2xl font-bold text-white mt-0 mb-4" {...props} />
-                          ),
-                          h2: ({ node, ...props }) => (
-                            <h2 className="text-xl font-semibold text-white mt-6 mb-3" {...props} />
-                          ),
-                          h3: ({ node, ...props }) => (
-                            <h3 className="text-lg font-medium text-white mt-5 mb-2" {...props} />
-                          ),
-                          p: ({ node, ...props }) => <p className="mb-4 text-gray-300" {...props} />,
-                          ul: ({ node, ...props }) => <ul className="mb-4 pl-6 list-disc" {...props} />,
-                          ol: ({ node, ...props }) => <ol className="mb-4 pl-6 list-decimal" {...props} />,
-                          li: ({ node, ...props }) => <li className="mb-1 text-gray-300" {...props} />,
-                          a: ({ node, ...props }) => (
-                            <a
-                              className="text-purple-400 hover:text-purple-300 underline"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              {...props}
-                            />
-                          ),
-                          code: ({ node, inline, ...props }: any) =>
-                            inline ? (
-                              <code
-                                className="bg-gray-800 px-1 py-0.5 rounded text-sm text-purple-300 font-mono"
-                                {...props}
+                )}
+
+                <div className="space-y-2">
+                  {searchSteps.map((step, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <div className="flex-shrink-0">{getStepIcon(step.type, step.isActive, step.completed)}</div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={cn(
+                              "text-xs",
+                              step.completed ? "text-gray-400" : step.isActive ? "text-white" : "text-gray-500",
+                            )}
+                          >
+                            {step.message}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {loading && currentStep && (
+                    <div className="flex items-center gap-3 pt-2 border-t border-gray-800/50">
+                      <Loader2 className="w-3 h-3 animate-spin text-blue-400" />
+                      <span className="text-xs text-white">{currentStep}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Error Display */}
+            {error && (
+              <div className="bg-red-900/20 border border-red-800/30 rounded-xl p-4">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-400" />
+                  <div className="text-red-400 text-sm">
+                    <strong>Error:</strong> {error}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sources Section */}
+            {sources.length > 0 && (
+              <div className="space-y-3">
+                <button
+                  onClick={() => setSourcesExpanded(!sourcesExpanded)}
+                  className="flex items-center gap-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                >
+                  <ChevronDown className={cn("w-4 h-4 transition-transform", sourcesExpanded && "rotate-180")} />
+                  Sources
+                </button>
+
+                {/* Update the source cards rendering to use favicon and make title bold */}
+                {sourcesExpanded && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {sources.map((source) => (
+                      <a
+                        key={source.id}
+                        href={source.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group block p-3 bg-gray-900/30 border border-gray-800/50 rounded-lg hover:bg-gray-900/50 hover:border-gray-700/50 transition-all duration-200"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-gray-800/50 flex items-center justify-center flex-shrink-0 group-hover:bg-gray-700/50 transition-colors">
+                            {source.favicon ? (
+                              <img
+                                src={source.favicon || "/placeholder.svg"}
+                                alt={`${source.domain} favicon`}
+                                className="w-4 h-4"
+                                onError={(e) => {
+                                  // If favicon fails to load, show Globe icon
+                                  e.currentTarget.style.display = "none"
+                                  const parent = e.currentTarget.parentElement
+                                  if (parent) {
+                                    const globe = document.createElement("span")
+                                    globe.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="w-3 h-3 text-gray-400"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`
+                                    parent.appendChild(globe)
+                                  }
+                                }}
                               />
                             ) : (
-                              <code {...props} />
-                            ),
-                          pre: ({ node, ...props }) => (
-                            <pre
-                              className="bg-gray-900/50 border border-gray-800 rounded-lg p-4 overflow-x-auto mb-4 text-sm font-mono"
-                              {...props}
-                            />
-                          ),
-                          strong: ({ node, ...props }) => <strong className="font-semibold text-white" {...props} />,
-                          em: ({ node, ...props }) => <em className="text-gray-300 italic" {...props} />,
-                          blockquote: ({ node, ...props }) => (
-                            <blockquote
-                              className="border-l-4 border-purple-500/50 pl-4 italic text-gray-400"
-                              {...props}
-                            />
-                          ),
-                          hr: ({ node, ...props }) => <hr className="border-gray-800 my-6" {...props} />,
-                        }}
-                      >
-                        {aiResponse}
-                      </ReactMarkdown>
-                      {isTyping && <span className="animate-pulse text-purple-400">|</span>}
-                    </div>
+                              <Globe className="w-3 h-3 text-gray-400" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-medium bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">
+                                {source.id}
+                              </span>
+                              <span className="text-xs text-gray-500 truncate">{source.domain}</span>
+                            </div>
+                            <h4 className="text-white text-sm font-bold group-hover:text-blue-300 transition-colors leading-tight">
+                              {source.title}
+                            </h4>
+                          </div>
+                        </div>
+                      </a>
+                    ))}
                   </div>
                 )}
               </div>
             )}
 
-            {!query && (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 flex items-center justify-center mx-auto mb-8 shadow-lg shadow-purple-500/20">
-                  <Brain className="w-10 h-10 text-white" />
-                </div>
-                <h1 className="text-4xl font-bold text-white mb-6">What can I help you with?</h1>
-                <p className="text-gray-400 text-xl mb-12">
-                  Ask me anything about programming, technology, or development
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-                  {[
-                    "How to learn React hooks?",
-                    "Python web development guide",
-                    "Machine learning basics",
-                    "JavaScript best practices",
-                  ].map((example) => (
-                    <button
-                      key={example}
-                      onClick={() => {
-                        setSearchQuery(example)
-                        router.push(`/ai-search?q=${encodeURIComponent(example)}`)
-                      }}
-                      className="p-6 bg-gray-900/30 border border-gray-800/30 rounded-xl hover:border-gray-700/40 hover:bg-gray-900/40 transition-all duration-300 text-left group"
-                    >
-                      <div className="flex items-center gap-4">
-                        <Brain className="w-5 h-5 text-purple-400 group-hover:text-purple-300 transition-colors" />
-                        <span className="text-gray-300 group-hover:text-white transition-colors">{example}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+            {/* Answer Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-300">Answer</span>
               </div>
+
+              {/* AI Response */}
+              {(aiResponse || loading) && (
+                <div>
+                  {aiResponse ? (
+                    <div>
+                      <div className="text-gray-200 leading-relaxed" ref={responseRef}>
+                        {renderMarkdownWithCitations(aiResponse)}
+                        {isTyping && <span className="animate-pulse text-blue-400 ml-1">|</span>}
+                      </div>
+
+                      {/* Response Actions */}
+                      <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-800/50">
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={copyToClipboard}
+                            className="p-2 rounded-lg text-gray-400 hover:bg-gray-800/50 hover:text-white transition-colors"
+                            title="Copy response"
+                          >
+                            {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                          </button>
+                          <button
+                            onClick={() => fetchAIResponseRealTime(query)}
+                            className="p-2 rounded-lg text-gray-400 hover:bg-gray-800/50 hover:text-white transition-colors"
+                            title="Regenerate"
+                          >
+                            <RefreshCw className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-500/20">
+              <Brain className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-medium text-white mb-4">What can I help you with?</h1>
+            <p className="text-gray-400 text-lg mb-12">Ask me anything about programming, technology, or development</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto">
+              {[
+                "How to learn React hooks?",
+                "Python web development guide",
+                "Machine learning basics",
+                "JavaScript best practices",
+              ].map((example) => (
+                <button
+                  key={example}
+                  onClick={() => {
+                    setSearchQuery(example)
+                    router.push(`/ai-search?q=${encodeURIComponent(example)}`)
+                  }}
+                  className="p-4 bg-gray-900/30 border border-gray-800/50 rounded-xl hover:border-gray-700/50 hover:bg-gray-900/50 transition-all duration-300 text-left group"
+                >
+                  <div className="flex items-center gap-3">
+                    <Brain className="w-4 h-4 text-blue-400 group-hover:text-blue-300 transition-colors" />
+                    <span className="text-gray-300 group-hover:text-white transition-colors text-sm">{example}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Bottom Search Bar */}
+      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-full max-w-2xl px-4 z-40">
+        <form onSubmit={handleSearch} className="relative">
+          <div
+            className={cn(
+              "relative bg-gray-900/80 backdrop-blur-xl border rounded-2xl transition-all duration-300 shadow-2xl",
+              isFocused ? "border-blue-500/50 ring-1 ring-blue-500/20" : "border-gray-700/50 hover:border-gray-600/50",
             )}
+          >
+            <div className="flex items-center">
+              <Search
+                className={cn(
+                  "absolute left-4 w-4 h-4 transition-colors duration-300",
+                  isFocused ? "text-blue-400" : "text-gray-400",
+                )}
+              />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setTimeout(() => setIsFocused(false), 150)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask anything..."
+                className="w-full py-3 pl-12 pr-12 bg-transparent text-white text-sm focus:outline-none placeholder-gray-400"
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className={cn(
+                  "absolute right-2 p-2 rounded-xl transition-all duration-300",
+                  searchQuery.length > 0 ? "bg-blue-500 hover:bg-blue-600 text-white" : "bg-gray-700/50 text-gray-400",
+                )}
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
 
-          {/* Sources Sidebar */}
-          {sources.length > 0 && (
-            <div className="lg:col-span-1">
-              <div className="sticky top-24">
-                <h3 className="text-base font-medium text-white mb-4 flex items-center">
-                  <BookOpen className="w-4 h-4 mr-2 text-purple-400" />
-                  Sources
-                </h3>
-                <div className="space-y-3">
-                  {sources.map((source, index) => (
-                    <a
-                      key={index}
-                      href={source.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block p-3 bg-gray-900/30 border border-gray-800/30 rounded-lg hover:border-gray-700/40 hover:bg-gray-900/40 transition-all duration-300 group"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-gray-800/50 flex items-center justify-center flex-shrink-0 group-hover:bg-gray-700/50 transition-colors">
-                          <Globe className="w-4 h-4 text-gray-400 group-hover:text-gray-300 transition-colors" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="text-white text-sm font-medium truncate group-hover:text-purple-300 transition-colors">
-                            {source.title}
-                          </h4>
-                          <p className="text-gray-400 text-xs mt-1">{source.domain}</p>
-                        </div>
-                        <ExternalLink className="w-3.5 h-3.5 text-gray-500 flex-shrink-0 group-hover:text-gray-400 transition-colors" />
-                      </div>
-                    </a>
-                  ))}
-                </div>
-              </div>
+          {/* Suggestions */}
+          {showSuggestions && (
+            <div className="absolute bottom-full left-0 right-0 mb-2 bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-xl shadow-2xl overflow-hidden">
+              {suggestions.map((suggestion, index) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault()
+                    selectSuggestion(suggestion)
+                  }}
+                  className={cn(
+                    "w-full text-left px-4 py-3 text-sm transition-colors duration-150",
+                    index === selectedSuggestion
+                      ? "bg-blue-500/20 text-blue-300"
+                      : "text-gray-300 hover:bg-gray-800/50",
+                  )}
+                >
+                  <Brain className="inline w-4 h-4 mr-3 text-gray-400" />
+                  {suggestion}
+                </button>
+              ))}
             </div>
           )}
-        </div>
-      </main>
+        </form>
+      </div>
     </div>
   )
 }
