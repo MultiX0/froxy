@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  go-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: froxy-apex
+    ports:
+      - "4040:4040"
+    env_file:
+      - .env
+    environment:
+      - GO_ENV=production
+      - PORT=4040
+      - LLM_API_KEY=${LLM_API_KEY}
+      - QDRANT_HOST=${QDRANT_HOST}
+      - EMBEDDING_SERVICE_URL=${EMBEDDING_SERVICE_URL}
+      - API_KEY=${API_KEY}
+    volumes:
+      # Optional: mount config files or data directories
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - froxy-network
+
+networks:
+  froxy-network:
+    external: true
