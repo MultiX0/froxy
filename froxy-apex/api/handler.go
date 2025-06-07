@@ -227,30 +227,44 @@ func HMACAuthMiddleware(next http.Handler) http.HandlerFunc {
 			return
 		}
 
-		// Also skip auth for CORS preflight requests
+		// Skip auth for CORS preflight requests
 		if r.Method == "OPTIONS" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// Get the Authorization header
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
-			return
-		}
+		// Check if this is a WebSocket request
+		isWebSocket := r.Header.Get("Upgrade") == "websocket" &&
+			r.Header.Get("Connection") == "Upgrade"
 
-		// Expect header format: "Bearer <api_key>"
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
-			return
-		}
+		var apiKey string
+		if isWebSocket {
+			// For WebSocket, get the API key from the URL query parameter
+			apiKey = r.URL.Query().Get("apiKey")
+			if apiKey == "" {
+				http.Error(w, "Missing API key in query parameter", http.StatusUnauthorized)
+				return
+			}
+		} else {
+			// For regular HTTP requests, check the Authorization header
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" {
+				http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
+				return
+			}
 
-		apiKey := parts[1]
-		if apiKey == "" {
-			http.Error(w, "Missing API key", http.StatusUnauthorized)
-			return
+			// Expect header format: "Bearer <api_key>"
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				http.Error(w, "Invalid Authorization header format", http.StatusUnauthorized)
+				return
+			}
+
+			apiKey = parts[1]
+			if apiKey == "" {
+				http.Error(w, "Missing API key", http.StatusUnauthorized)
+				return
+			}
 		}
 
 		// Validate the API key
