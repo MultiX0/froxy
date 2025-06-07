@@ -221,8 +221,14 @@ func MiddlwareChain(middlewares ...Middleware) Middleware {
 
 func HMACAuthMiddleware(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Skip auth for WebSocket upgrade requests
-		if r.Header.Get("Upgrade") == "websocket" {
+		// Skip authentication for the public health check endpoint
+		if r.URL.Path == "/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// Also skip auth for CORS preflight requests
+		if r.Method == "OPTIONS" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -247,16 +253,14 @@ func HMACAuthMiddleware(next http.Handler) http.HandlerFunc {
 			return
 		}
 
-		// In a real implementation, you would validate the API key against
-		// a stored set of valid keys (e.g., in a database or config)
-		// For this example, we'll use a simple hardcoded check
-		validAPIKey := os.Getenv("API_KEY") // Replace with actual key or lookup mechanism
+		// Validate the API key
+		validAPIKey := os.Getenv("API_KEY")
 		if apiKey != validAPIKey {
 			http.Error(w, "Invalid API key", http.StatusUnauthorized)
 			return
 		}
 
-		// API key is valid, proceed to next handler
+		// API key is valid, proceed to the next handler
 		next.ServeHTTP(w, r)
 	}
 }
