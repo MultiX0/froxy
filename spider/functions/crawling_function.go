@@ -458,6 +458,21 @@ func (c *Crawler) storePageDataWithRetry(pageData *models.PageData, maxRetries i
 			continue
 		}
 
+		// "remove all leading / from the end of the url"
+		// why ?
+		// we use the GenerateUUIDFromURL in the utils file , this made a hash from the url then convert it to uuid v4
+		// this proccess to make each url have unique id from the other to prevent the duplicate
+		// now there is one issue with this way
+		// the url https://google.com
+		// have different hash than: https://google.com/
+		// and this will make duplicates on our database
+		// now why we do not store the url directly to be the primary key ?
+		// qdrant dose not support this it support only integers or uuid`s
+
+		for pageData.URL[len(pageData.URL)-1] == '/' {
+			pageData.URL = pageData.URL[0:(len(pageData.URL) - 1)]
+		}
+
 		err := db.GetPostgresHandler().UpsertPageData(*pageData)
 		if err == nil {
 			log.Printf("Successfully stored page data for: %s", pageData.URL)
