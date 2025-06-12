@@ -68,7 +68,7 @@ var (
 	pagesCrawled = 0
 	// Because we use semantic search now, we need a proper amount of content to embedded for a good results
 	// so for this i added the minimum content length to avoid the pages that are empty or with less content so no meaning with embedding this pages it will just broke the search
-	minContentLength = 1500 // Minimum content length requirement
+	minContentLength = 500 // Minimum content length requirement
 )
 
 // NewCrawler creates a new crawler instance with proper initialization
@@ -124,23 +124,54 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 		return
 	}
 
+	// Set BaseDomain from the first URL for compatibility
 	if parsedURL, err := url.Parse(seedUrls[0]); err == nil {
 		c.BaseDomain = parsedURL.Host
 		log.Printf("Set BaseDomain to: %s", c.BaseDomain)
 		appendLog(fmt.Sprintf("Set BaseDomain to: %s", c.BaseDomain))
 	}
 
-	// First, try to crawl from sitemap
-	baseURL := fmt.Sprintf("https://%s", c.BaseDomain)
-	if err := c.crawlFromSitemap(baseURL); err != nil {
-		log.Printf("Failed to crawl from sitemap: %v, falling back to seed URLs", err)
-		appendLog(fmt.Sprintf("Failed to crawl from sitemap: %v, falling back to seed URLs", err))
+	// Process each seed URL individually
+	for i, seedURL := range seedUrls {
+		parsedURL, err := url.Parse(seedURL)
+		if err != nil {
+			log.Printf("Failed to parse seed URL %s: %v, skipping", seedURL, err)
+			appendLog(fmt.Sprintf("Failed to parse seed URL %s: %v, skipping", seedURL, err))
+			continue
+		}
 
-		// Fall back to seed URLs if sitemap fails
-		for _, url := range seedUrls {
-			c.safeEnqueue(models.Link{URL: url})
+		baseURL := fmt.Sprintf("%s://%s", parsedURL.Scheme, parsedURL.Host)
+		log.Printf("Processing seed URL %d/%d: %s", i+1, len(seedUrls), seedURL)
+		appendLog(fmt.Sprintf("Processing seed URL %d/%d: %s", i+1, len(seedUrls), seedURL))
+
+		// Try to crawl from sitemap for this specific domain
+		if err := c.crawlFromSitemap(baseURL); err != nil {
+			log.Printf("Failed to crawl from sitemap for %s: %v, using original URL as fallback", baseURL, err)
+			appendLog(fmt.Sprintf("Failed to crawl from sitemap for %s: %v, using original URL as fallback", baseURL, err))
+
+			// Fall back to the original seed URL if sitemap fails
+			c.safeEnqueue(models.Link{URL: seedURL})
+			log.Printf("Added fallback URL to queue: %s", seedURL)
+			appendLog(fmt.Sprintf("Added fallback URL to queue: %s", seedURL))
+		} else {
+			log.Printf("Successfully loaded sitemap for %s", baseURL)
+			appendLog(fmt.Sprintf("Successfully loaded sitemap for %s", baseURL))
 		}
 	}
+
+	// Check if we have any URLs in the queue after processing all seeds
+	c.Mu.Lock()
+	queueSize := len(*c.LinksQueue)
+	c.Mu.Unlock()
+
+	if queueSize == 0 {
+		log.Println("No URLs were added to the queue from any source. Exiting.")
+		appendLog("No URLs were added to the queue from any source. Exiting.")
+		return
+	}
+
+	log.Printf("Starting crawl with %d URLs in queue", queueSize)
+	appendLog(fmt.Sprintf("Starting crawl with %d URLs in queue", queueSize))
 
 	var wg sync.WaitGroup
 
@@ -148,7 +179,7 @@ func (c *Crawler) Start(workerCount int, seedUrls ...string) {
 	go c.monitorShutdown()
 
 	// Start workers
-	for i := 0; i < workerCount; i++ {
+	for i := range workerCount {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -259,7 +290,10 @@ func (c *Crawler) crawlFromSitemap(baseURL string) error {
 		log.Printf("Failed to parse sitemap from %s", sitemapURL)
 	}
 
-	return fmt.Errorf("no valid sitemap found")
+	// No sitemap found, add the base URL directly to queue
+	log.Printf("No valid sitemap found for %s, adding base URL to queue", baseURL)
+	c.safeEnqueue(models.Link{URL: baseURL})
+	return nil
 }
 
 func (c *Crawler) monitorShutdown() {

@@ -10,7 +10,6 @@ GRAY='\033[90m'
 RESET='\033[0m'
 
 NEEDS_CLEANUP=false
-INDEXER_BACKUP_EXISTS=false
 GO_BACKUP_EXISTS=false
 # Store the project root directory
 PROJECT_ROOT="$(pwd)"
@@ -26,8 +25,8 @@ draw_logo() {
     echo "  ╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   "
     echo -e "${RESET}"
     echo -e ""
-    echo -e "${CYAN}       Web Crawler & Indexer Suite${RESET}"
-    echo -e "${GRAY}       ═══════════════════════════${RESET}"
+    echo -e "${CYAN}       Web Crawler & Vector Search Suite${RESET}"
+    echo -e "${GRAY}       ════════════════════════════════${RESET}"
     echo -e ""
 }
 
@@ -41,9 +40,12 @@ check_env_file_configured() {
     fi
     
     # Check if file contains placeholder values
-    if grep -q "your_user\|your_password\|your_database\|your_api_key" "$env_file"; then
-        echo -e "${YELLOW}⚠ Unconfigured: ${component}/.env (contains placeholders)${RESET}"
-        return 1
+    if grep -q "your_user\|your_password\|your_database\|your_api_key\|localhost" "$env_file"; then
+        # Allow localhost for some services but check if other placeholders exist
+        if grep -q "your_user\|your_password\|your_database\|your_api_key" "$env_file"; then
+            echo -e "${YELLOW}⚠ Unconfigured: ${component}/.env (contains placeholders)${RESET}"
+            return 1
+        fi
     fi
     
     # Check if file is not empty and has required variables
@@ -53,6 +55,23 @@ check_env_file_configured() {
     fi
     
     echo -e "${GREEN}✓ Configured: ${component}/.env${RESET}"
+    return 0
+}
+
+create_docker_network() {
+    echo -e "${CYAN}Checking Docker network...${RESET}"
+    
+    if ! docker network ls | grep -q "froxy-network"; then
+        echo -e "${YELLOW}Creating froxy-network...${RESET}"
+        if docker network create froxy-network; then
+            echo -e "${GREEN}✓ Network created${RESET}"
+        else
+            echo -e "${RED}✗ Failed to create network${RESET}"
+            return 1
+        fi
+    else
+        echo -e "${GREEN}✓ Network exists${RESET}"
+    fi
     return 0
 }
 
@@ -82,6 +101,11 @@ validate_env_files() {
     if ! check_env_file_configured "${PROJECT_ROOT}/spider/.env" "spider"; then
         all_valid=false
         missing_or_invalid+=("spider")
+    fi
+    
+    if ! check_env_file_configured "${PROJECT_ROOT}/qdrant/.env" "qdrant"; then
+        all_valid=false
+        missing_or_invalid+=("qdrant")
     fi
     
     echo -e ""
@@ -130,88 +154,173 @@ validate_env_files() {
     fi
 }
 
+check_service_status() {
+    local service_name="$1"
+    local container_pattern="$2"
+    
+    if docker ps --format "table {{.Names}}" | grep -q "$container_pattern"; then
+        echo -e "${GREEN}✓ ${service_name} running${RESET}"
+        return 0
+    else
+        echo -e "${YELLOW}✗ ${service_name} not running${RESET}"
+        return 1
+    fi
+}
+
 check_database_status() {
-    echo -e "${CYAN}Checking database...${RESET}"
+    echo -e "${CYAN}Checking services status...${RESET}"
     
     if ! docker info > /dev/null 2>&1; then
         echo -e "${RED}Docker not running${RESET}"
         return 1
     fi
     
-    if docker ps --format "table {{.Names}}" | grep -q "postgres\|db"; then
-        echo -e "${GREEN}✓ Database running${RESET}"
+    local postgres_running=false
+    local qdrant_running=false 
+    local fastembed_running=false
+    
+    if check_service_status "PostgreSQL" "froxy_pgsql\|postgres"; then
+        postgres_running=true
+    fi
+    
+    if check_service_status "Qdrant" "qdrant"; then
+        qdrant_running=true
+    fi
+    
+    if check_service_status "FastEmbed" "embedding-service\|fastembed"; then
+        fastembed_running=true
+    fi
+    
+    if [ "$postgres_running" = true ] && [ "$qdrant_running" = true ] && [ "$fastembed_running" = true ]; then
+        echo -e "${GREEN}✓ All services running${RESET}"
         return 0
     else
-        echo -e "${YELLOW}✗ Local database not running${RESET}"
         return 1
     fi
 }
 
-start_local_database() {
-    echo -e "${YELLOW}Starting local database...${RESET}"
+setup_postgres_permissions() {
+    echo -e "${CYAN}Setting up PostgreSQL permissions...${RESET}"
     
+    if [ ! -d "${PROJECT_ROOT}/db/postgres_data" ]; then
+        mkdir -p "${PROJECT_ROOT}/db/postgres_data"
+        echo -e "${GREEN}✓ Created postgres_data directory${RESET}"
+    fi
+    
+    # Set proper permissions for PostgreSQL data directory
+    if sudo chown -R 999:999 "${PROJECT_ROOT}/db/postgres_data" 2>/dev/null; then
+        echo -e "${GREEN}✓ Set PostgreSQL permissions${RESET}"
+    else
+        echo -e "${YELLOW}⚠ Could not set PostgreSQL permissions (may need manual setup)${RESET}"
+    fi
+}
+
+start_services() {
+    echo -e "${CYAN}Starting services...${RESET}"
+    
+    # Create network first
+    create_docker_network
+    
+    # Setup PostgreSQL permissions
+    setup_postgres_permissions
+    
+    # Start PostgreSQL
+    echo -e "${YELLOW}Starting PostgreSQL...${RESET}"
     if [ ! -d "${PROJECT_ROOT}/db" ]; then
         echo -e "${RED}Error: 'db' directory not found${RESET}"
-        echo -e "${YELLOW}Run from froxy project root${RESET}"
         return 1
     fi
     
-    echo -e "${CYAN}Starting Docker Compose...${RESET}"
     cd "${PROJECT_ROOT}/db"
-    
     if docker compose up -d --build; then
-        echo -e "${GREEN}✓ Database started${RESET}"
-        echo -e "${CYAN}Waiting for ready...${RESET}"
-        sleep 5
-        cd "${PROJECT_ROOT}"
-        return 0
+        echo -e "${GREEN}✓ PostgreSQL started${RESET}"
     else
-        echo -e "${RED}✗ Failed to start database${RESET}"
+        echo -e "${RED}✗ Failed to start PostgreSQL${RESET}"
         cd "${PROJECT_ROOT}"
         return 1
     fi
+    cd "${PROJECT_ROOT}"
+    
+    # Start Qdrant
+    echo -e "${YELLOW}Starting Qdrant...${RESET}"
+    if [ ! -d "${PROJECT_ROOT}/qdrant" ]; then
+        echo -e "${RED}Error: 'qdrant' directory not found${RESET}"
+        return 1
+    fi
+    
+    cd "${PROJECT_ROOT}/qdrant"
+    if docker compose up -d --build; then
+        echo -e "${GREEN}✓ Qdrant started${RESET}"
+    else
+        echo -e "${RED}✗ Failed to start Qdrant${RESET}"
+        cd "${PROJECT_ROOT}"
+        return 1
+    fi
+    cd "${PROJECT_ROOT}"
+    
+    # Start FastEmbed
+    echo -e "${YELLOW}Starting FastEmbed service...${RESET}"
+    if [ ! -d "${PROJECT_ROOT}/fastembed" ]; then
+        echo -e "${RED}Error: 'fastembed' directory not found${RESET}"
+        return 1
+    fi
+    
+    cd "${PROJECT_ROOT}/fastembed"
+    if docker compose up -d --build; then
+        echo -e "${GREEN}✓ FastEmbed started${RESET}"
+    else
+        echo -e "${RED}✗ Failed to start FastEmbed${RESET}"
+        cd "${PROJECT_ROOT}"
+        return 1
+    fi
+    cd "${PROJECT_ROOT}"
+    
+    echo -e "${CYAN}Waiting for services to be ready...${RESET}"
+    sleep 10
+    
+    return 0
 }
 
-prompt_database_setup() {
-    echo -e "${WHITE}┌─ Database Status ──────────────────┐${RESET}"
+prompt_services_setup() {
+    echo -e "${WHITE}┌─ Services Status ──────────────────┐${RESET}"
     
     if check_database_status; then
-        echo -e "${WHITE}│${RESET} ${GREEN}Database ready!${RESET}                 ${WHITE}│${RESET}"
+        echo -e "${WHITE}│${RESET} ${GREEN}All services ready!${RESET}             ${WHITE}│${RESET}"
         echo -e "${WHITE}└────────────────────────────────────┘${RESET}"
         echo -e ""
         return 0
     else
-        echo -e "${WHITE}│${RESET} ${YELLOW}Local database not running${RESET}      ${WHITE}│${RESET}"
+        echo -e "${WHITE}│${RESET} ${YELLOW}Some services not running${RESET}       ${WHITE}│${RESET}"
         echo -e "${WHITE}│${RESET}                                    ${WHITE}│${RESET}"
-        echo -e "${WHITE}│${RESET} Start local database? ${GREEN}[Y]${RESET}es/${RED}[N]${RESET}o     ${WHITE}│${RESET}"
+        echo -e "${WHITE}│${RESET} Start all services? ${GREEN}[Y]${RESET}es/${RED}[N]${RESET}o      ${WHITE}│${RESET}"
         echo -e "${WHITE}└────────────────────────────────────┘${RESET}"
         echo -ne "${CYAN}Choice: ${RESET}"
-        read db_choice
+        read services_choice
         
-        case $db_choice in
+        case $services_choice in
             [Yy]|[Yy][Ee][Ss]|"")
                 echo -e ""
-                if start_local_database; then
-                    echo -e "${GREEN}Database ready!${RESET}"
-                    sleep 1
+                if start_services; then
+                    echo -e "${GREEN}Services ready!${RESET}"
+                    sleep 2
                     return 0
                 else
-                    echo -e "${RED}Failed to start local database${RESET}"
-                    echo -e "${YELLOW}Continuing anyway (external DB may be available)${RESET}"
-                    sleep 2
+                    echo -e "${RED}Failed to start some services${RESET}"
+                    echo -e "${YELLOW}Continuing anyway (external services may be available)${RESET}"
+                    sleep 3
                     return 0
                 fi
                 ;;
             [Nn]|[Nn][Oo])
                 echo -e ""
-                echo -e "${CYAN}Continuing with external database...${RESET}"
-                sleep 1
+                echo -e "${CYAN}Continuing with external services...${RESET}"
+                sleep 2
                 return 0
                 ;;
             *)
                 echo -e ""
                 echo -e "${YELLOW}Invalid choice, continuing anyway...${RESET}"
-                sleep 1
+                sleep 2
                 return 0
                 ;;
         esac
@@ -221,14 +330,6 @@ prompt_database_setup() {
 cleanup_files() {
     if [ "$NEEDS_CLEANUP" = true ]; then
         echo -e "\n${YELLOW}Cleaning up...${RESET}"
-        
-        INDEXER_FILE="${PROJECT_ROOT}/indexer-search/lib/services/indexer.js"
-        if [ "$INDEXER_BACKUP_EXISTS" = true ] && [ -f "${INDEXER_FILE}.backup" ]; then
-            rm -f "$INDEXER_FILE"
-            mv "${INDEXER_FILE}.backup" "$INDEXER_FILE"
-            echo -e "${GREEN}✓ Restored indexer.js${RESET}"
-            INDEXER_BACKUP_EXISTS=false
-        fi
         
         GO_FILE="${PROJECT_ROOT}/spider/main.go"
         GO_BACKUP="${PROJECT_ROOT}/spider/main_backup.go"
@@ -259,10 +360,10 @@ trap 'handle_interrupt' INT TERM
 show_menu() {
     echo -e "${WHITE}┌─ Main Menu ────────────────────────┐${RESET}"
     echo -e "${WHITE}│${RESET}                                    ${WHITE}│${RESET}"
-    echo -e "${WHITE}│${RESET}  ${YELLOW}1${RESET} - Start Crawler                ${WHITE}│${RESET}"
-    echo -e "${WHITE}│${RESET}  ${YELLOW}2${RESET} - Start Indexer                ${WHITE}│${RESET}"
-    echo -e "${CYAN}│${RESET}  ${CYAN}3${RESET} - Check Database               ${WHITE}│${RESET}"
-    echo -e "${GREEN}│${RESET}  ${GREEN}4${RESET} - Setup Environment Files     ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET}  ${YELLOW}1${RESET} - Start Web Crawler            ${WHITE}│${RESET}"
+    echo -e "${CYAN}│${RESET}  ${CYAN}2${RESET} - Check Services Status        ${WHITE}│${RESET}"
+    echo -e "${GREEN}│${RESET}  ${GREEN}3${RESET} - Setup Environment Files     ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET}  ${YELLOW}4${RESET} - Start All Services          ${WHITE}│${RESET}"
     echo -e "${RED}│${RESET}  ${RED}Q${RESET} - Quit                         ${WHITE}│${RESET}"
     echo -e "${WHITE}│${RESET}                                    ${WHITE}│${RESET}"
     echo -e "${WHITE}└────────────────────────────────────┘${RESET}"
@@ -292,6 +393,9 @@ setup_env_files() {
     if [ -f "${PROJECT_ROOT}/spider/.env" ]; then
         existing_files+=("spider/.env")
     fi
+    if [ -f "${PROJECT_ROOT}/qdrant/.env" ]; then
+        existing_files+=("qdrant/.env")
+    fi
     
     # If existing files found, ask for confirmation
     if [ ${#existing_files[@]} -gt 0 ]; then
@@ -314,19 +418,34 @@ setup_env_files() {
         echo -e ""
     fi
     
+    # Default values that work together
+    local DEFAULT_DB_HOST="localhost"
+    local DEFAULT_DB_PORT="5432"
+    local DEFAULT_DB_USER="froxy_user"
+    local DEFAULT_DB_PASSWORD="froxy_password"
+    local DEFAULT_DB_NAME="froxy_db"
+    local DEFAULT_DB_SSLMODE="disable"
+    local DEFAULT_QDRANT_API_KEY="froxy-qdrant-key-2024"
+    local DEFAULT_EMBEDDING_HOST="http://localhost:5050"
+    local DEFAULT_API_KEY="froxy-api-key-2024"
+    local DEFAULT_QDRANT_HOST="localhost"
+    
     # Create .env for indexer-search/
     echo -e "${CYAN}Creating indexer-search/.env...${RESET}"
     if [ ! -d "${PROJECT_ROOT}/indexer-search" ]; then
         echo -e "${RED}Warning: indexer-search directory not found${RESET}"
     else
-        cat > "${PROJECT_ROOT}/indexer-search/.env" << 'EOF'
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=your_user
-DB_PASSWORD=your_password
-DB_NAME=your_database
-DB_SSLMODE=disable
-API_KEY=your_api_key
+        cat > "${PROJECT_ROOT}/indexer-search/.env" << EOF
+DB_HOST=${DEFAULT_DB_HOST}
+DB_PORT=${DEFAULT_DB_PORT}
+DB_USER=${DEFAULT_DB_USER}
+DB_PASSWORD=${DEFAULT_DB_PASSWORD}
+DB_NAME=${DEFAULT_DB_NAME}
+DB_SSLMODE=${DEFAULT_DB_SSLMODE}
+QDRANT_API_KEY=${DEFAULT_QDRANT_API_KEY}
+EMBEDDING_HOST=${DEFAULT_EMBEDDING_HOST}
+API_KEY=${DEFAULT_API_KEY}
+QDRANT_HOST=${DEFAULT_QDRANT_HOST}
 PORT=8080
 EOF
         echo -e "${GREEN}✓ Created indexer-search/.env${RESET}"
@@ -337,9 +456,9 @@ EOF
     if [ ! -d "${PROJECT_ROOT}/front-end" ]; then
         echo -e "${RED}Warning: front-end directory not found${RESET}"
     else
-        cat > "${PROJECT_ROOT}/front-end/.env" << 'EOF'
+        cat > "${PROJECT_ROOT}/front-end/.env" << EOF
 API_URL=http://localhost:8080
-API_KEY=your_api_key
+API_KEY=${DEFAULT_API_KEY}
 EOF
         echo -e "${GREEN}✓ Created front-end/.env${RESET}"
     fi
@@ -349,10 +468,12 @@ EOF
     if [ ! -d "${PROJECT_ROOT}/db" ]; then
         echo -e "${RED}Warning: db directory not found${RESET}"
     else
-        cat > "${PROJECT_ROOT}/db/.env" << 'EOF'
-POSTGRES_DB=your_database
-POSTGRES_USER=your_user
-POSTGRES_PASSWORD=your_password
+        cat > "${PROJECT_ROOT}/db/.env" << EOF
+POSTGRES_DB=${DEFAULT_DB_NAME}
+POSTGRES_USER=${DEFAULT_DB_USER}
+POSTGRES_PASSWORD=${DEFAULT_DB_PASSWORD}
+DB_NAME=${DEFAULT_DB_NAME}
+DB_SSLMODE=${DEFAULT_DB_SSLMODE}
 EOF
         echo -e "${GREEN}✓ Created db/.env${RESET}"
     fi
@@ -362,22 +483,34 @@ EOF
     if [ ! -d "${PROJECT_ROOT}/spider" ]; then
         echo -e "${RED}Warning: spider directory not found${RESET}"
     else
-        cat > "${PROJECT_ROOT}/spider/.env" << 'EOF'
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=your_user
-DB_PASSWORD=your_password
-DB_NAME=your_database
-DB_SSLMODE=disable
+        cat > "${PROJECT_ROOT}/spider/.env" << EOF
+DB_HOST=${DEFAULT_DB_HOST}
+DB_PORT=${DEFAULT_DB_PORT}
+DB_USER=${DEFAULT_DB_USER}
+DB_PASSWORD=${DEFAULT_DB_PASSWORD}
+DB_NAME=${DEFAULT_DB_NAME}
+DB_SSLMODE=${DEFAULT_DB_SSLMODE}
+QDRANT_API_KEY=${DEFAULT_QDRANT_API_KEY}
+EMBEDDING_HOST=${DEFAULT_EMBEDDING_HOST}
+QDRANT_HOST=${DEFAULT_QDRANT_HOST}
 EOF
         echo -e "${GREEN}✓ Created spider/.env${RESET}"
     fi
     
+    # Create .env for qdrant/
+    echo -e "${CYAN}Creating qdrant/.env...${RESET}"
+    if [ ! -d "${PROJECT_ROOT}/qdrant" ]; then
+        echo -e "${RED}Warning: qdrant directory not found${RESET}"
+    else
+        cat > "${PROJECT_ROOT}/qdrant/.env" << EOF
+QDRANT_API_KEY=${DEFAULT_QDRANT_API_KEY}
+EOF
+        echo -e "${GREEN}✓ Created qdrant/.env${RESET}"
+    fi
+    
     echo -e ""
     echo -e "${GREEN}Environment files created successfully!${RESET}"
-    echo -e "${YELLOW}Remember to update the placeholder values:${RESET}"
-    echo -e "${YELLOW}  - your_user, your_password, your_database${RESET}"
-    echo -e "${YELLOW}  - your_api_key${RESET}"
+    echo -e "${CYAN}All services are configured to work together with default values.${RESET}"
     echo -e ""
     echo -e "${CYAN}Press any key to continue...${RESET}"
     read -n 1
@@ -398,13 +531,14 @@ start_crawling() {
         return
     fi
     
-    prompt_database_setup
+    prompt_services_setup
     
     clear
     draw_logo
-    echo -e "${WHITE}┌─ Web Crawler ──────────────────────┐${RESET}"
+    echo -e "${WHITE}┌─ Web Crawler Configuration ────────┐${RESET}"
     echo -e "${WHITE}│${RESET} Enter URLs (one per line)          ${WHITE}│${RESET}"
-    echo -e "${WHITE}│${RESET} Press ENTER on empty line to start ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET} Press ENTER on empty line to       ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET} configure workers                  ${WHITE}│${RESET}"
     echo -e "${WHITE}└────────────────────────────────────┘${RESET}"
     echo -e ""
 
@@ -436,7 +570,25 @@ start_crawling() {
     fi
 
     echo -e ""
-    echo -e "${GREEN}Starting crawler with $url_count URLs...${RESET}"
+    echo -e "${WHITE}┌─ Worker Configuration ─────────────┐${RESET}"
+    echo -e "${WHITE}│${RESET} How many workers? (default: 5)     ${WHITE}│${RESET}"
+    echo -e "${WHITE}└────────────────────────────────────┘${RESET}"
+    echo -ne "${CYAN}Workers: ${RESET}"
+    read workers
+
+    # Set default workers if empty
+    if [ -z "$workers" ]; then
+        workers=5
+    fi
+
+    # Validate workers is a number
+    if ! [[ "$workers" =~ ^[0-9]+$ ]]; then
+        echo -e "${RED}Invalid number of workers, using default (5)${RESET}"
+        workers=5
+    fi
+
+    echo -e ""
+    echo -e "${GREEN}Starting crawler with $url_count URLs and $workers workers...${RESET}"
 
     cat > "${PROJECT_ROOT}/spider/main_temp.go" << EOF
 package main
@@ -452,32 +604,37 @@ import (
 )
 
 func main() {
+	fmt.Println("starting spider bot")
+	err := godotenv.Load()
+	if err != nil {
+		log.Panic(err)
+		return
+	}
 
-    fmt.Println("starting spider bot")
-    err := godotenv.Load()
-    if err != nil {
-        log.Fatal(err)
-    }
+	err = db.InitQdrant()
+	if err != nil {
+		log.Panic(err)
+		return
+	}
 
-    err = db.InitPostgres()
-    if err != nil {
-        log.Println(err)
-    }
+	err = db.InitPostgres(db.Client)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 
-    defer db.GetPostgresHandler().GracefulShutdown(time.Second * 5)
+	defer db.GetPostgresHandler().GracefulShutdown(time.Second * 5)
 
 	crawler := functions.NewCrawler()
 
+	var crawlableSites = []string{
+		$(echo -e "$url_list"),
+	}
 
-    var crawlableSites = []string{
-        $(echo -e "$url_list"),
-    }
-
-    crawler.Start(
-        5,
-        crawlableSites...,
-    )
-
+	crawler.Start(
+		$workers, // the number of the worker
+		crawlableSites...,
+	)
 }
 EOF
 
@@ -509,7 +666,7 @@ EOF
 
     if [ $CRAWLER_EXIT_CODE -eq 0 ]; then
         echo -e ""
-        echo -e "${GREEN}Crawling completed!${RESET}"
+        echo -e "${GREEN}Crawling completed successfully!${RESET}"
     else
         echo -e ""
         echo -e "${RED}Crawling failed (exit code $CRAWLER_EXIT_CODE)${RESET}"
@@ -522,127 +679,63 @@ EOF
     cleanup_files
 }
 
-start_indexer() {
+check_services_menu() {
     clear
     draw_logo
     
-    # Validate environment files before proceeding
-    if ! validate_env_files; then
-        echo -e "${RED}Environment validation failed. Please configure .env files properly.${RESET}"
-        echo -e "${CYAN}Press any key to return to menu...${RESET}"
-        read -n 1
-        clear
-        return
-    fi
+    echo -e "${WHITE}┌─ Services Status ──────────────────┐${RESET}"
+    echo -e "${WHITE}│${RESET}                                    ${WHITE}│${RESET}"
     
-    prompt_database_setup
+    local postgres_running=false
+    local qdrant_running=false 
+    local fastembed_running=false
     
-    clear
-    draw_logo
-    echo -e "${WHITE}┌─ Search Indexer ───────────────────┐${RESET}"
-    echo -e "${WHITE}│${RESET} Starting TF-IDF indexer...         ${WHITE}│${RESET}"
-    echo -e "${WHITE}└────────────────────────────────────┘${RESET}"
-    echo -e ""
-
-    echo -e "${GREEN}Preparing indexer...${RESET}"
-    
-    INDEXER_FILE="${PROJECT_ROOT}/indexer-search/lib/services/indexer.js"
-    
-    if [ ! -f "$INDEXER_FILE" ]; then
-        echo -e "${RED}Error: Indexer file not found${RESET}"
-        echo -e "${CYAN}Press any key...${RESET}"
-        read -n 1
-        clear
-        return
-    fi
-    
-    cp "$INDEXER_FILE" "${INDEXER_FILE}.backup" || {
-        echo -e "${RED}Failed to back up indexer.js${RESET}"
-        return 1
-    }
-    INDEXER_BACKUP_EXISTS=true
-    NEEDS_CLEANUP=true
-    echo -e "${GREEN}✓ Backed up indexer.js${RESET}"
-    
-    sed -i 's|^// Run if called directly|// Run if called directly|g' "$INDEXER_FILE"
-    sed -i 's|^// if (require\.main === module) {|if (require.main === module) {|g' "$INDEXER_FILE"
-    sed -i 's|^//   calculateTfIdfInBatches()|  calculateTfIdfInBatches()|g' "$INDEXER_FILE"
-    sed -i 's|^//     \.then(() => {|    .then(() => {|g' "$INDEXER_FILE"
-    sed -i 's|^//       console\.log("TF-IDF calculation completed successfully");|      console.log("TF-IDF calculation completed successfully");|g' "$INDEXER_FILE"
-    sed -i 's|^//       process\.exit(0);|      process.exit(0);|g' "$INDEXER_FILE"
-    sed -i 's|^//     })|    })|g' "$INDEXER_FILE"
-    sed -i 's|^//     \.catch((error) => {|    .catch((error) => {|g' "$INDEXER_FILE"
-    sed -i 's|^//       console\.error("TF-IDF calculation failed:", error);|      console.error("TF-IDF calculation failed:", error);|g' "$INDEXER_FILE"
-    sed -i 's|^//       process\.exit(1);|      process.exit(1);|g' "$INDEXER_FILE"
-    sed -i 's|^//     });|    });|g' "$INDEXER_FILE"
-    sed -i 's|^// }|} |g' "$INDEXER_FILE"
-    
-    echo -e "${GREEN}✓ Modified indexer for execution${RESET}"
-    echo -e "${GRAY}──────────────────────────────${RESET}"
-
-    cd "${PROJECT_ROOT}/indexer-search/lib/services"
-    echo -e "${GREEN}Running indexer...${RESET}"
-    node indexer.js &
-    INDEXER_PID=$!
-    wait $INDEXER_PID
-    INDEXER_EXIT_CODE=$?
-    cd "${PROJECT_ROOT}"
-
-    if [ $INDEXER_EXIT_CODE -eq 0 ]; then
-        echo -e ""
-        echo -e "${GREEN}Indexing completed!${RESET}"
+    if check_service_status "PostgreSQL" "froxy_pgsql\|postgres"; then
+        postgres_running=true
+        echo -e "${WHITE}│${RESET} PostgreSQL: ${GREEN}Running${RESET}             ${WHITE}│${RESET}"
     else
-        echo -e ""
-        echo -e "${RED}Indexing failed (exit code $INDEXER_EXIT_CODE)${RESET}"
+        echo -e "${WHITE}│${RESET} PostgreSQL: ${RED}Stopped${RESET}             ${WHITE}│${RESET}"
     fi
     
-    echo -e "${CYAN}Press any key...${RESET}"
-    read -n 1
-    clear
-    
-    cleanup_files
-}
-
-check_database_menu() {
-    clear
-    draw_logo
-    
-    # Validate environment files before proceeding
-    if ! validate_env_files; then
-        echo -e "${RED}Environment validation failed. Please configure .env files properly.${RESET}"
-        echo -e "${CYAN}Press any key to return to menu...${RESET}"
-        read -n 1
-        clear
-        return
-    fi
-    
-    echo -e "${WHITE}┌─ Database Status ──────────────────┐${RESET}"
-    
-    if check_database_status; then
-        echo -e "${WHITE}│${RESET} ${GREEN}✓ Database running${RESET}              ${WHITE}│${RESET}"
-        echo -e "${WHITE}│${RESET} Connection: ${GREEN}Active${RESET}              ${WHITE}│${RESET}"
+    if check_service_status "Qdrant" "qdrant"; then
+        qdrant_running=true
+        echo -e "${WHITE}│${RESET} Qdrant: ${GREEN}Running${RESET}                 ${WHITE}│${RESET}"
     else
-        echo -e "${WHITE}│${RESET} ${RED}✗ Local database not running${RESET}    ${WHITE}│${RESET}"
-        echo -e "${WHITE}│${RESET} Connection: ${RED}Inactive${RESET}            ${WHITE}│${RESET}"
+        echo -e "${WHITE}│${RESET} Qdrant: ${RED}Stopped${RESET}                 ${WHITE}│${RESET}"
+    fi
+    
+    if check_service_status "FastEmbed" "embedding-service\|fastembed"; then
+        fastembed_running=true
+        echo -e "${WHITE}│${RESET} FastEmbed: ${GREEN}Running${RESET}              ${WHITE}│${RESET}"
+    else
+        echo -e "${WHITE}│${RESET} FastEmbed: ${RED}Stopped${RESET}              ${WHITE}│${RESET}"
+    fi
+    
+    echo -e "${WHITE}│${RESET}                                    ${WHITE}│${RESET}"
+    
+    if [ "$postgres_running" = true ] && [ "$qdrant_running" = true ] && [ "$fastembed_running" = true ]; then
+        echo -e "${WHITE}│${RESET} ${GREEN}All services are running!${RESET}       ${WHITE}│${RESET}"
+    else
+        echo -e "${WHITE}│${RESET} ${YELLOW}Some services need attention${RESET}    ${WHITE}│${RESET}"
         echo -e "${WHITE}│${RESET}                                    ${WHITE}│${RESET}"
-        echo -e "${WHITE}│${RESET} Start local database? ${GREEN}[Y]${RESET}/${RED}[N]${RESET}      ${WHITE}│${RESET}"
+        echo -e "${WHITE}│${RESET} Start missing services? ${GREEN}[Y]${RESET}/${RED}[N]${RESET}      ${WHITE}│${RESET}"
     fi
     
     echo -e "${WHITE}└────────────────────────────────────┘${RESET}"
     echo -e ""
     
-    if ! check_database_status; then
+    if [ "$postgres_running" != true ] || [ "$qdrant_running" != true ] || [ "$fastembed_running" != true ]; then
         echo -ne "${CYAN}Choice: ${RESET}"
-        read db_choice
+        read services_choice
         
-        case $db_choice in
+        case $services_choice in
             [Yy]|[Yy][Ee][Ss]|"")
                 echo -e ""
-                start_local_database
+                start_services
                 ;;
             [Nn]|[Nn][Oo])
                 echo -e ""
-                echo -e "${CYAN}Database remains stopped${RESET}"
+                echo -e "${CYAN}Services remain as they are${RESET}"
                 ;;
             *)
                 echo -e ""
@@ -656,45 +749,131 @@ check_database_menu() {
     clear
 }
 
-quit_app() {
+start_all_services_menu() {
     clear
     draw_logo
-    echo -e "${GREEN}Thank you for using Froxy!${RESET}"
-    echo -e ""
-    cleanup_files
-    sleep 1
-    exit 0
+    
+    echo -e "${WHITE}┌─ Start All Services ───────────────┐${RESET}"
+    echo -e "${WHITE}│${RESET} This will start:                   ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET}  - PostgreSQL Database             ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET}  - Qdrant Vector Database          ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET}  - FastEmbed Service                ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET}                                    ${WHITE}│${RESET}"
+    echo -e "${WHITE}│${RESET} Continue? ${GREEN}[Y]${RESET}es / ${RED}[N]${RESET}o              ${WHITE}│${RESET}"
+    echo -e "${WHITE}└────────────────────────────────────┘${RESET}"
+    echo -ne "${CYAN}Choice: ${RESET}"
+    read start_choice
+    
+    case $start_choice in
+        [Yy]|[Yy][Ee][Ss]|"")
+            echo -e ""
+            if start_services; then
+                echo -e "${GREEN}All services started successfully!${RESET}"
+            else
+                echo -e "${RED}Some services failed to start${RESET}"
+            fi
+            ;;
+        [Nn]|[Nn][Oo])
+            echo -e ""
+            echo -e "${CYAN}Operation cancelled${RESET}"
+            ;;
+        *)
+            echo -e ""
+            echo -e "${YELLOW}Invalid choice${RESET}"
+            ;;
+    esac
+    
+    echo -e "${CYAN}Press any key...${RESET}"
+    read -n 1
+    clear
 }
 
 main() {
+    clear
+    
+    # Check if running from correct directory
+    if [ ! -f "froxy.sh" ]; then
+        echo -e "${RED}Error: Please run this script from the project root directory${RESET}"
+        echo -e "${CYAN}The directory should contain: db/, spider/, qdrant/, fastembed/, etc.${RESET}"
+        exit 1
+    fi
+    
     while true; do
-        clear
         draw_logo
         show_menu
         read choice
-
+        
         case $choice in
             1)
                 start_crawling
                 ;;
             2)
-                start_indexer
+                check_services_menu
                 ;;
             3)
-                check_database_menu
-                ;;
-            4)
                 setup_env_files
                 ;;
-            [Qq]|quit|QUIT)
-                quit_app
+            4)
+                start_all_services_menu
+                ;;
+            [Qq]|[Qq][Uu][Ii][Tt])
+                clear
+                echo -e "${CYAN}Thanks for using FROXY!${RESET}"
+                cleanup_files
+                exit 0
                 ;;
             *)
-                echo -e "${RED}Invalid choice${RESET}"
-                sleep 1
+                echo -e ""
+                echo -e "${RED}Invalid choice. Please try again.${RESET}"
+                sleep 2
+                clear
                 ;;
         esac
     done
 }
 
+# Check if Docker is installed
+if ! command -v docker &> /dev/null; then
+    echo -e "${RED}Docker is not installed or not in PATH${RESET}"
+    echo -e "${CYAN}Please install Docker first${RESET}"
+    exit 1
+fi
+
+# Check if Docker is running, if not try to start it
+if ! docker info > /dev/null 2>&1; then
+    echo -e "${YELLOW}Docker is not running, attempting to start...${RESET}"
+    
+    # Try different methods to start Docker based on the system
+    if command -v systemctl &> /dev/null; then
+        # SystemD systems (most Linux distributions)
+        sudo systemctl start docker
+        sleep 3
+    elif command -v service &> /dev/null; then
+        # SysV init systems
+        sudo service docker start
+        sleep 3
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        # macOS
+        open -a Docker
+        echo -e "${CYAN}Starting Docker Desktop on macOS...${RESET}"
+        echo -e "${CYAN}Please wait for Docker Desktop to start, then run the script again${RESET}"
+        exit 1
+    else
+        echo -e "${RED}Could not start Docker automatically${RESET}"
+        echo -e "${CYAN}Please start Docker manually and run the script again${RESET}"
+        exit 1
+    fi
+    
+    # Check again after attempting to start
+    if ! docker info > /dev/null 2>&1; then
+        echo -e "${RED}Failed to start Docker${RESET}"
+        echo -e "${CYAN}Please start Docker manually and run the script again${RESET}"
+        exit 1
+    else
+        echo -e "${GREEN}✓ Docker started successfully${RESET}"
+        sleep 2
+    fi
+fi
+
+# Start main function
 main

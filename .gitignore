@@ -52,3 +52,4 @@ fastembed/models/
 qdrant/qdrant_storage/
 
 froxy-apex/.env
+qdrant/.env

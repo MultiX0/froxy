@@ -1,10 +1,10 @@
 const axios = require('axios');
 
-const EMBEDDING_SERVICE_URL = process.env.EMBEDDING_SERVICE_URL || 'http://embedding-service:5050';
+const EMBEDDING_HOST = process.env.EMBEDDING_HOST || 'http://embedding-service:5050';
 async function embed(text) {
     try {        
         const body = { text };
-        const res = await axios.post(`${EMBEDDING_SERVICE_URL}/embed`,body);
+        const res = await axios.post(`${EMBEDDING_HOST}/embed`,body);
         if (res.status >= 200 && res.status <= 300) {
             return res.data.embedding;
         }
