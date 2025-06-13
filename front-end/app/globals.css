@@ -138,3 +138,177 @@ input {
   outline: 2px solid rgba(59, 130, 246, 0.5) !important;
   outline-offset: 2px;
 }
+
+/* Add these animation delay utilities at the end of the file */
+@layer utilities {
+  .delay-0 {
+    animation-delay: 0ms;
+  }
+  .delay-75 {
+    animation-delay: 75ms;
+  }
+  .delay-150 {
+    animation-delay: 150ms;
+  }
+  .delay-225 {
+    animation-delay: 225ms;
+  }
+  .delay-300 {
+    animation-delay: 300ms;
+  }
+  .delay-375 {
+    animation-delay: 375ms;
+  }
+  .delay-450 {
+    animation-delay: 450ms;
+  }
+  .delay-525 {
+    animation-delay: 525ms;
+  }
+  .delay-600 {
+    animation-delay: 600ms;
+  }
+  .delay-675 {
+    animation-delay: 675ms;
+  }
+  .delay-750 {
+    animation-delay: 750ms;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+  }
+
+  .text-glow-strong {
+    text-shadow: 0 0 12px rgba(59, 130, 246, 0.7);
+  }
+}
+
+/* Add shimmer animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.08) 37%,
+    rgba(255, 255, 255, 0.03) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Add these animations to the end of the file */
+@keyframes glow {
+  0%,
+  100% {
+    text-shadow: 0 0 4px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    text-shadow: 0 0 8px rgba(59, 130, 246, 0.6), 0 0 12px rgba(59, 130, 246, 0.3);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.magic-text {
+  animation: fadeIn 0.3s ease-out, glow 2s ease-in-out infinite;
+}
+
+/* Update the magic-char animation to be a pop-up effect */
+.magic-char {
+  display: inline-block;
+  opacity: 0;
+  transform: scale(0.5);
+  animation: charPopUp 0.4s forwards;
+}
+
+@keyframes charPopUp {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+    text-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.1);
+    text-shadow: 0 0 15px rgba(59, 130, 246, 0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    text-shadow: 0 0 5px rgba(59, 130, 246, 0.4);
+  }
+}
+
+/* Add a subtle glow to the text container */
+.magic-text-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.magic-text-container::after {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  right: -5px;
+  bottom: -5px;
+  border-radius: inherit;
+  background: radial-gradient(circle at center, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+  z-index: -1;
+  opacity: 0;
+  animation: containerGlow 1.5s forwards;
+}
+
+@keyframes containerGlow {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Character animation */
+.magic-text-char {
+  display: inline-block;
+  opacity: 0;
+  transform: scale(0.5);
+  animation: magicPopIn 0.5s forwards;
+  white-space: pre;
+}
+
+@keyframes magicPopIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+    filter: blur(4px);
+    text-shadow: 0 0 10px rgba(59, 130, 246, 0.8);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.2);
+    filter: blur(0);
+    text-shadow: 0 0 15px rgba(59, 130, 246, 0.9), 0 0 30px rgba(59, 130, 246, 0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    text-shadow: 0 0 5px rgba(59, 130, 246, 0.4);
+  }
+}

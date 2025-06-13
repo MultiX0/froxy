@@ -85,10 +85,27 @@ export default function FroxySearch() {
     fetchResultsCount()
   }, [])
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     const query = selectedSuggestion >= 0 ? suggestions[selectedSuggestion] : searchQuery
     if (query.trim()) {
+      // Prefetch the summary in the background
+      if (searchMode === "search") {
+        try {
+          // No need to await this - we want it to happen in the background
+          fetch(`/api/summary?q=${encodeURIComponent(query.trim())}`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          })
+          console.log("Prefetching summary for:", query.trim())
+        } catch (error) {
+          console.error("Error prefetching summary:", error)
+        }
+      }
+
+      // Redirect as usual
       if (searchMode === "ai") {
         router.push(`/signin?redirect=${encodeURIComponent(`/ai-search?q=${encodeURIComponent(query.trim())}`)}`)
       } else {
@@ -108,6 +125,23 @@ export default function FroxySearch() {
       e.preventDefault()
       const suggestion = suggestions[selectedSuggestion]
       setSearchQuery(suggestion)
+
+      // Prefetch the summary in the background
+      if (searchMode === "search") {
+        try {
+          fetch(`/api/summary?q=${encodeURIComponent(suggestion.trim())}`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          })
+          console.log("Prefetching summary for:", suggestion.trim())
+        } catch (error) {
+          console.error("Error prefetching summary:", error)
+        }
+      }
+
+      // Redirect as usual
       if (searchMode === "ai") {
         router.push(`/signin?redirect=${encodeURIComponent(`/ai-search?q=${encodeURIComponent(suggestion.trim())}`)}`)
       } else {
@@ -120,6 +154,23 @@ export default function FroxySearch() {
     setSearchQuery(suggestion)
     setSuggestions([])
     setIsFocused(false)
+
+    // Prefetch the summary in the background
+    if (searchMode === "search") {
+      try {
+        fetch(`/api/summary?q=${encodeURIComponent(suggestion.trim())}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        })
+        console.log("Prefetching summary for:", suggestion.trim())
+      } catch (error) {
+        console.error("Error prefetching summary:", error)
+      }
+    }
+
+    // Redirect as usual
     if (searchMode === "ai") {
       router.push(`/signin?redirect=${encodeURIComponent(`/ai-search?q=${encodeURIComponent(suggestion.trim())}`)}`)
     } else {

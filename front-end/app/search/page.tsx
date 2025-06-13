@@ -1,7 +1,9 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import React from "react"
+
+import type { ReactElement } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import {
   Search,
@@ -62,6 +64,11 @@ interface SearchResponse {
   }
 }
 
+interface SummaryResponse {
+  msg: string
+  url?: string
+}
+
 // Function to detect if text contains Arabic characters
 const containsArabic = (text: string): boolean => {
   const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/
@@ -77,7 +84,43 @@ const getDomainFromUrl = (url: string): string => {
   }
 }
 
-export default function SearchResults() {
+// Magic text animation component - Memoized to prevent re-renders
+const MagicText = React.memo(({ text }: { text: string }) => {
+  const [animated, setAnimated] = useState(false)
+  const animationRef = useRef(false)
+
+  useEffect(() => {
+    // Only animate once when the component first mounts
+    if (!animationRef.current) {
+      setAnimated(true)
+      animationRef.current = true
+    }
+  }, [])
+
+  return (
+    <div className="magic-text-container">
+      <p className="text-gray-200 text-sm leading-relaxed">
+        {text.split("").map((char, index) => (
+          <span
+            key={index}
+            className={`magic-text-char ${animated ? "animated" : ""}`}
+            style={{
+              animationDelay: `${index * 10}ms`,
+              opacity: animated ? 1 : 0,
+            }}
+          >
+            {char === " " ? "\u00A0" : char}
+          </span>
+        ))}
+        {!text.endsWith("...") && "..."}
+      </p>
+    </div>
+  )
+})
+
+MagicText.displayName = "MagicText"
+
+export default function SearchResults(): ReactElement {
   const searchParams = useSearchParams()
   const router = useRouter()
   const query = searchParams.get("q") || ""
@@ -98,6 +141,12 @@ export default function SearchResults() {
 
   const [openDropdown, setOpenDropdown] = useState<number | null>(null)
   const [copySuccess, setCopySuccess] = useState<number | null>(null)
+
+  const [summary, setSummary] = useState<string | null>(null)
+  const [summaryUrl, setSummaryUrl] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [summaryId, setSummaryId] = useState<string | null>(null)
 
   // Function to fetch search results from our backend API
   const fetchSearchResults = async (searchQuery: string) => {
@@ -128,10 +177,48 @@ export default function SearchResults() {
     }
   }
 
+  // Updated to use our internal API route instead of the external API directly
+  const fetchSearchSummary = async (searchQuery: string) => {
+    if (!searchQuery.trim()) return
+
+    setSummaryLoading(true)
+    setSummaryError(null)
+
+    try {
+      const response = await fetch(`/api/summary?q=${encodeURIComponent(searchQuery)}`)
+
+      if (!response.ok) {
+        // Just set error state but don't display it
+        setSummaryError("Failed to fetch summary")
+        setSummary(null)
+        setSummaryUrl(null)
+        return
+      }
+
+      const data: SummaryResponse = await response.json()
+      setSummary(data.msg || null)
+      setSummaryUrl(data.url || null)
+
+      // Generate a unique ID for this summary to prevent re-animations
+      setSummaryId(`summary-${Date.now()}`)
+
+      // Debug log to check what we're getting from the backend
+      console.log("Summary response:", data)
+    } catch (err) {
+      console.error("Summary API error:", err)
+      setSummaryError("Failed to fetch summary")
+      setSummary(null)
+      setSummaryUrl(null)
+    } finally {
+      setSummaryLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (query) {
       setSearchQuery(query)
       fetchSearchResults(query)
+      fetchSearchSummary(query)
     }
   }, [query])
 
@@ -154,6 +241,8 @@ export default function SearchResults() {
       router.push(`/search?q=${encodeURIComponent(finalQuery.trim())}`)
       setSuggestions([])
       setIsFocused(false)
+
+      // This will trigger the useEffect that calls fetchSearchResults and fetchSearchSummary
     }
   }
 
@@ -247,20 +336,59 @@ export default function SearchResults() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (openDropdown !== null) {
-        const dropdownElement = document.querySelector(`[data-dropdown-id="${openDropdown}"]`);
+        const dropdownElement = document.querySelector(`[data-dropdown-id="${openDropdown}"]`)
         if (dropdownElement && !dropdownElement.contains(event.target as Node)) {
-          setOpenDropdown(null);
+          setOpenDropdown(null)
         }
       }
-    };
-  
-    document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [openDropdown]);
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [openDropdown])
 
   const showSuggestions = suggestions.length > 0 && isFocused
+
+  // Shimmer loading component for summary
+  const SummaryShimmer = () => {
+    return (
+      <div className="bg-gray-900/30 border border-gray-800/30 rounded-xl p-4 mb-4 overflow-hidden">
+        <div className="space-y-3">
+          <div className="h-4 bg-gray-700/30 rounded animate-pulse w-3/4"></div>
+          <div className="h-4 bg-gray-700/30 rounded animate-pulse w-full"></div>
+          <div className="h-4 bg-gray-700/30 rounded animate-pulse w-5/6"></div>
+          <div className="h-4 bg-gray-700/30 rounded animate-pulse w-2/3"></div>
+        </div>
+      </div>
+    )
+  }
+
+  // Memoize the summary component to prevent re-renders
+  const memoizedSummary = useMemo(() => {
+    if (!summary) return null
+
+    return (
+      <div className="bg-gray-900/30 border border-gray-800/30 rounded-xl p-4 mb-4">
+        <MagicText key={summaryId} text={summary} />
+
+        {summaryUrl && (
+          <div className="mt-3">
+            <a
+              href={summaryUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-sm text-blue-400 hover:text-blue-300 transition-colors duration-200"
+            >
+              Read more
+              <ExternalLink className="ml-1 w-3 h-3" />
+            </a>
+          </div>
+        )}
+      </div>
+    )
+  }, [summary, summaryUrl, summaryId])
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden transition-colors duration-500 flex flex-col">
@@ -408,7 +536,7 @@ export default function SearchResults() {
               <p>
                 Found {metadata.totalResults} results for{" "}
                 <span className="text-blue-400 font-medium">"{metadata.query}"</span>
-                <span className="ml-2 text-gray-500">({(metadata.searchTime/1000)}s)</span>
+                <span className="ml-2 text-gray-500">({metadata.searchTime / 1000}s)</span>
                 {results.length > resultsPerPage && (
                   <span className="ml-2">
                     (Showing {(currentPage - 1) * resultsPerPage + 1}-
@@ -417,6 +545,11 @@ export default function SearchResults() {
                 )}
               </p>
             </div>
+          )}
+
+          {/* Summary Section - Only show on first page */}
+          {query && currentPage === 1 && (
+            <div className="mb-6">{summaryLoading ? <SummaryShimmer /> : memoizedSummary}</div>
           )}
 
           {/* Loading State */}
@@ -477,7 +610,7 @@ export default function SearchResults() {
                               )}
                               <p className="text-gray-500 text-sm font-mono truncate">{domain}</p>
                             </div>
-                            
+
                             {/* Menu Button */}
                             <div className="relative flex-shrink-0" data-dropdown-id={result.id}>
                               <button
