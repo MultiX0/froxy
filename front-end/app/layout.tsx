@@ -5,7 +5,12 @@ import type { Metadata } from "next"
 export const metadata: Metadata = {
   title: "FROXY - Modern Search Engine",
   description: "Clean, modern search experience",
-  viewport: "width=device-width, initial-scale=1"
+  viewport: "width=device-width, initial-scale=1",
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon-96x96.png',
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default function RootLayout({
