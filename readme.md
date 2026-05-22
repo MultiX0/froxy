@@ -1,49 +1,42 @@
-# **🕷️ Froxy**
+# Froxy
 
-> A chill, open-source web engine that crawls, indexes, and vibes with web content using semantic search.
+A modular, open-source web engine that crawls, indexes, and searches web content using semantic embeddings.
 
-![froxy banner](https://github.com/MultiX0/froxy/blob/main/banner.png?raw=true)
+## What is Froxy?
 
----
+Froxy is a full-stack web engine designed to crawl web pages, extract content, and index it using semantic embeddings for intelligent search. It includes:
 
-## 💡 What is Froxy?
+- A Go-based crawler with real-time indexing
+- FastEmbed service for generating semantic embeddings
+- Qdrant vector database for semantic search
+- Froxy Apex, an AI-powered intelligent search component (Perplexity-style)
+- A PostgreSQL database for structured data storage
+- A Next.js frontend fully integrated with the backend APIs
 
-Froxy is a modular full-stack web engine designed to crawl web pages, extract content, and index it using **semantic embeddings** for intelligent search — all powered by modern tools. It includes:
+This project is built for learning, experimenting, and extending. It is a solid starting point for developers who want to understand how modern semantic search engines work from scratch.
 
-* A **Go**-based crawler (aka the spider 🕷️) with real-time indexing
-* **FastEmbed** service for generating semantic embeddings
-* **Qdrant** vector database for semantic search
-* **Froxy Apex** - AI-powered intelligent search (Perplexity-style)
-* A **PostgreSQL** database for structured data
-* A **Next.js** front-end UI (fully integrated with real APIs)
+> Built in 3 days. It may not be perfect, but it works, and we will keep improving it together.
 
-This project is built for learning, experimenting, and extending — great for developers who want to understand how modern semantic search engines work from scratch.
+> The architecture favors simplicity over complexity. It is clean, straightforward, and intentionally free of over-engineering. Scaling and additional complexity can be introduced later as needed.
 
-> Fun fact: I made this project in just **3 days** — so it might not be perfect, but you know what?
-> **It works!**
->
-> *(We'll keep evolving this codebase together ❤️)*
+## Platform Support
 
-> Note: I prefer simplicity over unnecessary complexity. We might make the architecture more advanced in the future, but for now, it's simple, clean, and straightforward—no fancy stuff, no over-engineering. It's just a chill project for now. If needed, we can scale and make it more complex later. After all, it started as a fun project—nothing more. <3
+Froxy is built and tested on Linux. The setup process relies on a shell script (`froxy.sh`) that automatically initializes environment files, creates the Docker network, and configures all required services. This automation is essential for getting everything running correctly.
 
----
+**Windows users should be aware** that the shell-based setup does not work as expected on Windows. Since the environment initialization and service configuration happen through the shell script and CLI tools, running Froxy on Windows may require manual intervention to replicate what the script handles automatically. Until a Windows-compatible setup path is added, Linux or WSL2 is strongly recommended.
 
-## 🔍 Features
+## Features
 
-* 🌐 Crawl websites with real-time indexing (Go)
-* 🧠 Semantic search using embeddings (FastEmbed + Qdrant)
-* 🤖 AI-powered intelligent search with LLM integration (Froxy Apex)
-* 🚀 Vector similarity search for intelligent results
-* 📊 Chunk-based relevance scoring with cosine similarity
-* 🕺 Store structured data in PostgreSQL
-* 🎨 Modern UI in Next.js + Tailwind
-* 🐳 Fully containerized with Docker
+- Crawl websites with real-time indexing (Go)
+- Semantic search using embeddings (FastEmbed + Qdrant)
+- AI-powered intelligent search with LLM integration (Froxy Apex)
+- Vector similarity search for context-aware results
+- Chunk-based relevance scoring with cosine similarity
+- Structured data storage in PostgreSQL
+- Modern UI built with Next.js and Tailwind CSS
+- Fully containerized with Docker
 
-> The frontend is fully connected to the backend and provides semantic search capabilities.
-
----
-
-## 📂 Folder Structure
+## Folder Structure
 
 ```
 froxy/
@@ -56,7 +49,7 @@ froxy/
 │   └── styles/         # TailwindCSS setup
 ├── indexer-search/     # Node.js search backend
 │   └── lib/
-│       ├── functions/ 
+│       ├── functions/
 │       ├── services/   # DB + search service
 │       └── utils/      # Helper utilities
 ├── froxy-apex/         # AI-powered intelligent search service
@@ -68,7 +61,7 @@ froxy/
 │   └── utils/          # Helper utilities
 ├── spider/             # Web crawler in Go with real-time indexing
 │   ├── db/             # DB handling (PostgreSQL + Qdrant)
-│   ├── functions/      # Crawl + indexing logic + Proxies (if-need it)
+│   ├── functions/      # Crawl + indexing logic + proxy support
 │   ├── models/         # Data models
 │   └── utils/          # Misc helpers
 ├── fastembed/          # FastEmbed embedding service
@@ -77,47 +70,44 @@ froxy/
 ├── qdrant/             # Qdrant vector database
 │   └── docker-compose.yml
 ├── db/                 # PostgreSQL database
-│   ├── scripts/        # Shell backups
+│   ├── scripts/        # Shell backup scripts
 │   └── docker-compose.yml
-├── froxy.sh            # Automated setup & runner script
+├── froxy.sh            # Automated setup and runner script
 ├── LICENSE             # MIT License
 └── readme.md           # This file
 ```
 
----
-
-## ⚙️ Getting Started
+## Getting Started
 
 ### Requirements
 
-* Node.js (18+)
-* pnpm or npm
-* Go (1.23+)
-* Docker & Docker Compose
-* At least 2GB RAM (for embedding service)
+- Node.js 18 or higher
+- pnpm or npm
+- Go 1.23 or higher
+- Docker and Docker Compose
+- At least 2 GB of available RAM (for the embedding service)
+- Linux (see Platform Support above)
 
-### Quick Setup (Recommended for Crawler)
+### Quick Setup (Recommended)
 
-For the fastest crawler setup without dealing with configuration details:
+For the fastest crawler setup without manual configuration:
 
 ```bash
-# Make the script executable and run it
 chmod +x froxy.sh
 ./froxy.sh
 ```
 
 The script will automatically:
+
 - Set up all environment variables with default values
 - Create the Docker network
 - Start all required services (PostgreSQL, Qdrant, FastEmbed)
-- Health check all containers
+- Run health checks on all containers
 - Guide you through the crawling process
 
-**Note**: The `froxy.sh` script only handles the crawler setup. You'll need to manually start the `froxy-apex` AI service and `front-end` after crawling.
+**Note:** `froxy.sh` only handles crawler setup. The `froxy-apex` AI service and frontend must be started manually after crawling.
 
 ### Manual Setup
-
-If you prefer to set things up manually:
 
 ```bash
 # 1. Create Docker network
@@ -129,7 +119,6 @@ docker-compose up -d --build
 
 # 3. Start PostgreSQL database
 cd ../db
-# Set proper permissions for PostgreSQL data directory
 sudo chown -R 999:999 postgres_data/
 docker-compose up -d --build
 
@@ -137,36 +126,34 @@ docker-compose up -d --build
 cd ../fastembed
 docker-compose up -d --build
 
-# 5. Wait for all services to be healthy, then run the crawler
+# 5. Run the crawler once all services are healthy
 cd ../spider
 go run main.go
 
-# 6. After crawling, start the search backend
+# 6. Start the search backend
 cd ../indexer-search
 npm install
 npm start
 
-# 7. Start the AI-powered search service (Froxy Apex)
-# Make sure to configure froxy-apex/.env first
+# 7. Configure and start Froxy Apex
+# Ensure froxy-apex/.env is configured before running
 cd ../froxy-apex
 go run main.go
 
-# 8. Launch the front-end
+# 8. Start the frontend
 cd ../front-end
 npm i --legacy-peer-deps
 npm run dev
 ```
 
----
-
-## 🔐 Environment Variables
+## Environment Variables
 
 ### Default Configuration
 
-All services use these environment variables (automatically set by `froxy.sh`):
+All services use the following environment variables, which are automatically set by `froxy.sh`:
 
 ```env
-# Database Configuration (for spider & indexer-search)
+# Database Configuration (spider and indexer-search)
 DB_HOST=localhost
 DB_PORT=5432
 DB_USER=froxy_user
@@ -174,14 +161,14 @@ DB_PASSWORD=froxy_password
 DB_NAME=froxy_db
 DB_SSLMODE=disable
 
-# Vector Database Configuration
+# Vector Database
 QDRANT_API_KEY=froxy-secret-key
 QDRANT_HOST=http://localhost:6333
 
 # FastEmbed Service
 EMBEDDING_HOST=http://localhost:5050
 
-# AI Service (for froxy-apex)
+# AI Service (froxy-apex)
 LLM_API_KEY=your_groq_api_key
 API_KEY=your_froxy_apex_api_key
 ```
@@ -202,7 +189,7 @@ DB_SSLMODE=disable
 QDRANT_API_KEY=froxy-secret-key
 ```
 
-#### `spider/.env` & `indexer-search/.env`
+#### `spider/.env` and `indexer-search/.env`
 ```env
 DB_HOST=localhost
 DB_PORT=5432
@@ -233,34 +220,30 @@ ACCESS_CODE=auth_access_for_froxy_apex_ui
 AUTH_SECRET_TOKEN=jwt_token_for_apex_ui_to_calc_the_usage
 ```
 
-> 💡 The `froxy.sh` script automatically creates `.env` files with working default values for the crawler and database services. You'll need to manually configure `froxy-apex/.env` and `front-end/.env` for the AI search and UI components.
+> `froxy.sh` automatically creates `.env` files with working defaults for the crawler and database services. `froxy-apex/.env` and `front-end/.env` must be configured manually.
 
----
-
-## 🤔 How it works
+## How It Works
 
 ### Traditional Search
-1. **Crawler** pulls website content from your provided URLs
-2. **Real-time indexing** generates semantic embeddings using FastEmbed
-3. **Qdrant** stores vector embeddings for semantic similarity search
-4. **PostgreSQL** stores structured metadata
-5. **Frontend** provides intelligent semantic search interface
+
+1. The crawler pulls website content from provided URLs.
+2. Real-time indexing generates semantic embeddings using FastEmbed.
+3. Qdrant stores vector embeddings for semantic similarity search.
+4. PostgreSQL stores structured metadata.
+5. The frontend provides an intelligent semantic search interface.
 
 ### AI-Powered Search (Froxy Apex)
-1. **User query** is received and processed
-2. **Query enhancement** using Llama 3.1 8B via Groq API
-3. **Embedding generation** for the enhanced query using FastEmbed
-4. **Vector search** in Qdrant to find relevant pages
-5. **Content chunking** of relevant pages for detailed analysis
-6. **Cosine similarity** calculation for each chunk against the query
-7. **LLM processing** to generate structured response with:
-   - Concise summary
-   - Detailed results with sources
-   - Relevance scores
-   - Reference links and favicons
-   - Confidence ratings
+
+1. User query is received and processed.
+2. Query enhancement is performed using Llama 3.1 8B via the Groq API.
+3. Embeddings are generated for the enhanced query using FastEmbed.
+4. Vector search in Qdrant retrieves the most relevant pages.
+5. Relevant pages are chunked for detailed analysis.
+6. Cosine similarity is calculated for each chunk against the query.
+7. An LLM generates a structured response including a summary, results with sources, relevance scores, reference links, and confidence ratings.
 
 ### Response Format
+
 ```json
 {
   "summary": "Concise overview addressing the query directly",
@@ -281,37 +264,24 @@ AUTH_SECRET_TOKEN=jwt_token_for_apex_ui_to_calc_the_usage
 
 ### Crawling Process
 
-When you run the spider, you'll be prompted to:
-- Enter URLs you want to crawl
-- Set the number of workers (default: 5)
+When the spider is run, you will be prompted to:
 
-The crawler will:
-- Extract content from each page
-- Generate embeddings in real-time
-- Store vectors in Qdrant
-- Store metadata in PostgreSQL
+- Enter the URLs to crawl
+- Set the number of concurrent workers (default: 5)
 
-### Manual Service Configuration
+The crawler will extract content, generate embeddings in real time, store vectors in Qdrant, and store metadata in PostgreSQL.
 
-Since `froxy.sh` only handles the crawler, you'll need to manually configure:
-
-- **Froxy Apex**: Set up your Groq API key and other environment variables
-- **Frontend**: Configure API endpoints and keys
-- **Service startup**: Start each service individually after crawler completes
-
----
-
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Next.js UI   │───▶│  Search Backend  │───▶│   PostgreSQL    │
+│   Next.js UI    │───▶│  Search Backend  │───▶│   PostgreSQL    │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │
          │                       ▼
          │              ┌──────────────────┐    ┌─────────────────┐
          │              │     Qdrant       │◀───│   FastEmbed     │
-         │              │ (Vector Search)  │    │   (Embeddings)  │
+         │              │ (Vector Search)  │    │  (Embeddings)   │
          │              └──────────────────┘    └─────────────────┘
          │                       ▲                       ▲
          │                       │                       │
@@ -324,58 +294,28 @@ Since `froxy.sh` only handles the crawler, you'll need to manually configure:
          ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Froxy Apex    │───▶│   Groq LLM API   │    │  Chunk Analysis │
-│ (AI Search)     │    │ (Llama 3.1 8B)   │◀───│ (Cosine Sim)    │
+│  (AI Search)    │    │ (Llama 3.1 8B)   │◀───│  (Cosine Sim)   │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
----
+## Tech Stack
 
-## 📙 Tech Stack
+- **Go (Golang)** - web crawler with real-time indexing
+- **FastEmbed** - embedding generation service
+- **Qdrant** - vector database for semantic search
+- **Froxy Apex** - AI-powered search with LLM integration
+- **Llama 3.1 8B** - language model via Groq API
+- **Node.js** - search backend API
+- **PostgreSQL** - structured data storage
+- **Next.js** - frontend interface
+- **TailwindCSS + shadcn/ui** - UI components
+- **Docker** - containerized services
+- **Docker Network** - inter-service communication
 
-* 🕷️ **Go (Golang)** – crawler with real-time indexing
-* 🧠 **FastEmbed** – embedding generation service
-* 🚀 **Qdrant** – vector database for semantic search
-* 🤖 **Froxy Apex** – AI-powered search with LLM integration
-* 🦙 **Llama 3.1 8B** – language model via Groq API
-* 💪 **Node.js** – search backend API
-* 📀 **PostgreSQL** – structured data storage
-* ⚛️ **Next.js** – frontend interface
-* 🎨 **TailwindCSS + shadcn/ui** – UI components
-* 🐳 **Docker** – containerized services
-* 🌐 **Docker Network** – service communication
+## Contributing
 
----
+Contributions are welcome. Feel free to fork the repository, open a pull request, or share ideas for improvement.
 
-## 🚀 Key Improvements
+## License
 
-* **AI-Powered Search**: Perplexity-style intelligent search with LLM integration
-* **Semantic Search**: Find content by meaning, not just keywords
-* **Real-time Indexing**: Content is indexed as it's crawled
-* **Vector Similarity**: Intelligent search results based on context
-* **Chunk Analysis**: Deep content analysis with cosine similarity
-* **Structured Responses**: Rich JSON responses with sources and confidence scores
-* **Query Enhancement**: AI-powered query understanding and improvement
-* **Scalable Architecture**: Microservices with Docker containers
-* **Automated Setup**: One-command deployment with `froxy.sh`
-
----
-
-## 📬 Want to contribute?
-
-* Fork it 🌛
-* Open a PR 🚰
-* Share your ideas 💡
-
----
-
-## 📜 License
-
-**MIT** — feel free to fork, remix, and learn from it.
-
----
-
-Made with ❤️ for the curious minds of the internet.
-
-Stay weird. Stay building.
-
-> "Not all who wander are lost — some are just crawling the web with semantic understanding."
+MIT - free to fork, remix, and learn from.
